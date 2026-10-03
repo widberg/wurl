@@ -2,6 +2,9 @@
 const std = @import("std");
 const Io = std.Io;
 
+const mecha = @import("mecha");
+const clap = @import("clap");
+
 /// This is a documentation comment to explain the `printAnotherMessage` function below.
 ///
 /// Accepting an `Io.Writer` instance is a handy way to write reusable code.

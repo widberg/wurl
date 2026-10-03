@@ -41,6 +41,12 @@ pub fn build(b: *std.Build) void {
         .target = target,
     });
 
+    const mecha = b.dependency("mecha", .{});
+    const mecha_mod = mecha.module("mecha");
+
+    const clap = b.dependency("clap", .{});
+    const clap_mod = clap.module("clap");
+
     // Here we define an executable. An executable needs to have a root module
     // which needs to expose a `main` function. While we could add a main function
     // to the module defined above, it's sometimes preferable to split business
@@ -79,6 +85,8 @@ pub fn build(b: *std.Build) void {
                 // can be extremely useful in case of collisions (which can happen
                 // importing modules from different packages).
                 .{ .name = "wurl", .module = mod },
+                .{ .name = "mecha", .module = mecha_mod },
+                .{ .name = "clap", .module = clap_mod },
             },
         }),
     });
