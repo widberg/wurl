@@ -21,6 +21,12 @@ pub fn build(b: *std.Build) void {
     // target and optimize options) will be listed when running `zig build --help`
     // in this directory.
 
+    const mecha = b.dependency("mecha", .{});
+    const mecha_mod = mecha.module("mecha");
+
+    const clap = b.dependency("clap", .{});
+    const clap_mod = clap.module("clap");
+
     // This creates a module, which represents a collection of source files alongside
     // some compilation options, such as optimization mode and linked system libraries.
     // Zig modules are the preferred way of making Zig code available to consumers.
@@ -39,13 +45,18 @@ pub fn build(b: *std.Build) void {
         // Later on we'll use this module as the root module of a test executable
         // which requires us to specify a target.
         .target = target,
+        // List of modules available for import in source files part of the
+        // root module.
+        .imports = &.{
+            // Here "wurl" is the name you will use in your source code to
+            // import this module (e.g. `@import("wurl")`). The name is
+            // repeated because you are allowed to rename your imports, which
+            // can be extremely useful in case of collisions (which can happen
+            // importing modules from different packages).
+            .{ .name = "mecha", .module = mecha_mod },
+            .{ .name = "clap", .module = clap_mod },
+        },
     });
-
-    const mecha = b.dependency("mecha", .{});
-    const mecha_mod = mecha.module("mecha");
-
-    const clap = b.dependency("clap", .{});
-    const clap_mod = clap.module("clap");
 
     // Here we define an executable. An executable needs to have a root module
     // which needs to expose a `main` function. While we could add a main function
