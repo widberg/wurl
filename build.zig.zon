@@ -59,14 +59,8 @@
         //    // actually used.
         //    .lazy = false,
         //},
-        .mecha = .{
-            .url = "git+https://github.com/Hejsil/mecha#2e349ad906cf3995e0791a63aa4cd23a0b68eaa4",
-            .hash = "mecha-0.12.0-dVGaSNuLAQCE77UZV3DvpLe4MpHzgqgDBoMIqayuhNAV",
-        },
-        .clap = .{
-            .url = "git+https://github.com/Hejsil/zig-clap#05faf3905e8548f5cc269a8836e154065e70128d",
-            .hash = "clap-0.12.0-oBajB4XpAQCF1WRKnD5KOKPsnwwT_NNdAJ7Ww3irYJac",
-        },
+        .mecha = .{ .path = "vendor/mecha" },
+        .clap = .{ .path = "vendor/clap" },
     },
     // Specifies the set of files and directories that are included in this package.
     // Only files and directories listed here are included in the `hash` that
