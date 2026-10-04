@@ -375,13 +375,7 @@ fn Combine(comptime parsers: anytype) type {
         return void;
     if (types.len == 1)
         return types[0];
-    return Tuple(types.len, types[0..types.len].*);
-}
-
-/// HACK: Zig cannot cache functions that takes pointers (slices)
-///       so we have to pass the types as an array, by value.
-fn Tuple(comptime n: usize, comptime types: [n]type) type {
-    return meta.Tuple(&types);
+    return @Tuple(types);
 }
 
 /// Takes a tuple of `Parser(any)` and constructs a parser that only succeeds if all parsers
@@ -854,21 +848,21 @@ fn ToStructResult(comptime T: type) type {
 pub fn toStruct(comptime T: type) ToStructResult(T) {
     return struct {
         fn func(value: anytype) T {
-            const struct_fields = @typeInfo(T).@"struct".fields;
+            const struct_field_names = @typeInfo(T).@"struct".field_names;
             const copy_many = switch (@typeInfo(@TypeOf(value))) {
-                .@"struct" => |info| info.is_tuple and info.fields.len == struct_fields.len,
-                .array => |info| info.len == struct_fields.len,
+                .@"struct" => |info| info.is_tuple and info.field_names.len == struct_field_names.len,
+                .array => |info| info.len == struct_field_names.len,
                 else => false,
             };
             var res: T = undefined;
             if (copy_many) {
-                inline for (struct_fields, 0..) |field, i|
-                    @field(res, field.name) = value[i];
+                inline for (struct_field_names, 0..) |field_name, i|
+                    @field(res, field_name) = value[i];
                 return res;
             } else {
-                if (struct_fields.len == 0)
+                if (struct_field_names.len == 0)
                     @compileError("Cannot map " ++ @typeName(@TypeOf(value)) ++ " to " ++ @typeName(T));
-                @field(res, struct_fields[0].name) = value;
+                @field(res, struct_field_names[0]) = value;
                 return res;
             }
         }

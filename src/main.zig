@@ -5,19 +5,14 @@ const wurl = @import("wurl");
 const clap = @import("clap");
 
 pub fn main(init: std.process.Init) !void {
-    // First we specify what parameters our program can take.
-    // We can use `parseParamsComptime` to parse a string into an array of `Param(Help)`.
     const params = comptime clap.parseParamsComptime(
         \\-h, --help             Display this help and exit.
-        \\-n, --number <usize>   An option parameter, which takes a value.
-        \\-s, --string <str>...  An option parameter which can be specified multiple times.
-        \\<str>...
+        \\--install              Install the protocol handler.
+        \\--uninstall            Uninstall the protocol handler.
+        \\--launch <str>         Handle a protocol string.
         \\
     );
 
-    // Initialize our diagnostics, which can be used for reporting useful errors.
-    // This is optional. You can also pass `.{}` to `clap.parse` if you don't
-    // care about the extra information `Diagnostics` provides.
     var diag = clap.Diagnostic{};
     var res = clap.parse(clap.Help, &params, clap.parsers.default, init.minimal.args, .{
         .diagnostic = &diag,
@@ -30,11 +25,9 @@ pub fn main(init: std.process.Init) !void {
     defer res.deinit();
 
     if (res.args.help != 0)
-        std.debug.print("--help\n", .{});
-    if (res.args.number) |n|
-        std.debug.print("--number = {}\n", .{n});
-    for (res.args.string) |s|
-        std.debug.print("--string = {s}\n", .{s});
-    for (res.positionals[0]) |pos|
-        std.debug.print("{s}\n", .{pos});
+        return clap.helpToFile(init.io, .stderr(), clap.Help, &params, .{});
+    if (res.args.launch) |str| {
+        const parsed_wurl = (try wurl.parse(init.gpa, str)).value.ok;
+        std.debug.print("{any}\n", .{parsed_wurl});
+    }
 }
