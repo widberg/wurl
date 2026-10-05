@@ -85,17 +85,17 @@ fn launch(gpa: std.mem.Allocator, io: std.Io, config: wurl.Config, url: wurl.Wur
     const file = find_file_in_config_by_hash_prefix(&config, url.hash) orelse return;
 
     switch (url.location.?) {
-        .address => |address_location| {
+        .address => |address| {
             const config_file_ghidra = file.ghidra orelse return;
-            try ghidra(gpa, io, config.ghidra, config_file_ghidra, address_location.address);
+            try ghidra(gpa, io, config.ghidra, config_file_ghidra, address);
         },
-        .offset => |offset_location| {
+        .offset => |offset| {
             const path = file.path orelse return;
-            try imhex(io, config.imhex, path, offset_location.offset);
+            try imhex(io, config.imhex, path, offset);
         },
-        .line_column => |line_column_location| {
+        .line_column => |line_column| {
             const path = file.path orelse return;
-            try vscode(gpa, io, config.vscode, path, line_column_location.line_column);
+            try vscode(gpa, io, config.vscode, path, line_column);
         },
     }
 }

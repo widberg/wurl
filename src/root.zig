@@ -1,27 +1,15 @@
 const std = @import("std");
 const mecha = @import("mecha");
 
-pub const WurlAddressLocation = struct {
-    address: ?u64,
-};
-
-pub const WurlOffsetLocation = struct {
-    offset: ?u64,
-};
-
 pub const WurlLineColumn = struct {
     line: u64,
     column: ?u64,
 };
 
-pub const WurlLineColumnLocation = struct {
-    line_column: ?WurlLineColumn,
-};
-
 pub const WurlLocation = union(enum) {
-    address: WurlAddressLocation,
-    offset: WurlOffsetLocation,
-    line_column: WurlLineColumnLocation,
+    address: ?u64,
+    offset: ?u64,
+    line_column: ?WurlLineColumn,
 };
 
 pub const Wurl = struct {
@@ -49,12 +37,12 @@ const decimal_number = mecha.int(u64, .{
 const address_location = mecha.combine(.{
     mecha.ascii.char('@').discard(),
     hex_number.opt(),
-}).map(mecha.toStruct(WurlAddressLocation)).map(mecha.unionInit(WurlLocation, WurlLocation.address));
+}).map(mecha.unionInit(WurlLocation, WurlLocation.address));
 
 const offset_location = mecha.combine(.{
     mecha.ascii.char('#').discard(),
     hex_number.opt(),
-}).map(mecha.toStruct(WurlOffsetLocation)).map(mecha.unionInit(WurlLocation, WurlLocation.offset));
+}).map(mecha.unionInit(WurlLocation, WurlLocation.offset));
 
 const line_column_location = mecha.combine(.{
     mecha.ascii.char(':').discard(),
@@ -65,7 +53,7 @@ const line_column_location = mecha.combine(.{
             decimal_number,
         }).opt(),
     }).map(mecha.toStruct(WurlLineColumn)).opt(),
-}).map(mecha.toStruct(WurlLineColumnLocation)).map(mecha.unionInit(WurlLocation, WurlLocation.line_column));
+}).map(mecha.unionInit(WurlLocation, WurlLocation.line_column));
 
 const location = mecha.oneOf(.{
     address_location,
@@ -88,17 +76,18 @@ test "parser" {
     const testing = std.testing;
     const allocator = testing.allocator;
 
-    _ = try testing.expectEqualDeep((try url.parse(allocator, "wurl://abcdef0@0")).value.ok, Wurl{ .hash = "abcdef0", .location = .{ .address = .{ .address = 0 } }, .extensions = null });
-    _ = try testing.expectEqualDeep((try url.parse(allocator, "wurl://abcdef0@0?")).value.ok, Wurl{ .hash = "abcdef0", .location = .{ .address = .{ .address = 0 } }, .extensions = "" });
+    _ = try testing.expectEqualDeep((try url.parse(allocator, "wurl://abcdef0@0")).value.ok, Wurl{ .hash = "abcdef0", .location = .{ .address = 0 }, .extensions = null });
+    _ = try testing.expectEqualDeep((try url.parse(allocator, "wurl://abcdef0@0?")).value.ok, Wurl{ .hash = "abcdef0", .location = .{ .address = 0 }, .extensions = "" });
     _ = try testing.expectEqualDeep((try url.parse(allocator, "wurl://abcdef0")).value.ok, Wurl{ .hash = "abcdef0", .location = null, .extensions = null });
-    _ = try testing.expectEqualDeep((try url.parse(allocator, "wurl://abcdef0@0?aaaaa")).value.ok, Wurl{ .hash = "abcdef0", .location = .{ .address = .{ .address = 0 } }, .extensions = "aaaaa" });
-    _ = try testing.expectEqualDeep((try url.parse(allocator, "wurl://abcdef0@?aaaaa")).value.ok, Wurl{ .hash = "abcdef0", .location = .{ .address = .{ .address = null } }, .extensions = "aaaaa" });
+    _ = try testing.expectEqualDeep((try url.parse(allocator, "wurl://abcdef0@0?aaaaa")).value.ok, Wurl{ .hash = "abcdef0", .location = .{ .address = 0 }, .extensions = "aaaaa" });
+    _ = try testing.expectEqualDeep((try url.parse(allocator, "wurl://abcdef0@?aaaaa")).value.ok, Wurl{ .hash = "abcdef0", .location = .{ .address = null }, .extensions = "aaaaa" });
     _ = try testing.expectEqualDeep((try url.parse(allocator, "wurl://abcdef0?aaaaa")).value.ok, Wurl{ .hash = "abcdef0", .location = null, .extensions = "aaaaa" });
 
     _ = (try url.parse(allocator, "")).value.err;
     _ = (try url.parse(allocator, "asdasds://abcdef0")).value.err;
     _ = (try url.parse(allocator, "wurl://")).value.err;
     _ = (try url.parse(allocator, "wurl://?")).value.err;
+    _ = (try url.parse(allocator, "wurl://@0")).value.err;
     _ = (try url.parse(allocator, "wurl://abcdef0@#?")).value.err;
 }
 
