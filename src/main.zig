@@ -17,10 +17,23 @@ fn imhex(io: std.Io, imhex_path: []const u8, open_path: []const u8, offset: u64)
     return spawn(io, &argv);
 }
 
-fn launch(io: std.Io, url: wurl.Wurl) !void {
+fn launch(io: std.Io, config: wurl.Config, url: wurl.Wurl) !void {
     _ = url;
-    return imhex(io, "imhex", "D:\\programming\\widberg\\wurl\\zig-out\\bin\\wurl.exe", 0);
+    return imhex(io, config.imhex, "D:\\programming\\widberg\\wurl\\zig-out\\bin\\wurl.exe", 0);
 }
+
+const source =
+    \\.{
+    \\  .imhex = "imhex",
+    \\  .files = .{
+    \\    .{
+    \\      .hash = "aaaaa",
+    \\      .path = "blah",
+    \\    }
+    \\  }
+    \\}
+    \\
+;
 
 pub fn main(init: std.process.Init) !void {
     const params = comptime clap.parseParamsComptime(
@@ -40,9 +53,12 @@ pub fn main(init: std.process.Init) !void {
     defer res.deinit();
 
     if (res.positionals[0]) |str| {
+        const config = try wurl.config(init.gpa, init.arena.allocator(), source);
         const url = (try wurl.parse(init.gpa, str)).value.ok;
+
+        std.debug.print("{any}\n", .{config});
         std.debug.print("{any}\n", .{url});
-        return launch(init.io, url);
+        return launch(init.io, config, url);
     }
 
     return clap.helpToFile(init.io, .stderr(), clap.Help, &params, .{});

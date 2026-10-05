@@ -101,3 +101,28 @@ test "parser" {
     _ = (try url.parse(allocator, "wurl://?")).value.err;
     _ = (try url.parse(allocator, "wurl://abcdef0@#?")).value.err;
 }
+
+pub const ConfigFile = struct {
+    hash: []const u8,
+    path: []const u8,
+};
+
+pub const Config = struct {
+    imhex: []const u8,
+    files: []const ConfigFile,
+};
+
+pub fn config(gpa: std.mem.Allocator, arena: std.mem.Allocator, source: [:0]const u8) !Config {
+    var diagnostics: std.zon.parse.Diagnostics = undefined;
+    return std.zon.parse.fromSlice(Config, .{ .gpa = gpa, .arena = arena, .source = source, .diagnostics = &diagnostics, .ignore_unknown_fields = false });
+}
+
+test "config" {
+    const testing = std.testing;
+    const gpa = testing.allocator;
+    var arena_allocator: std.heap.ArenaAllocator = .init(gpa);
+    defer arena_allocator.deinit();
+    const arena = arena_allocator.allocator();
+
+    _ = try config(gpa, arena, ".{ .imhex = \"imhex\", .files = .{ .{ .hash = \"aaaaa\", .path = \"blah\" } } }");
+}
