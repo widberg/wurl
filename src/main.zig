@@ -1,6 +1,10 @@
 const std = @import("std");
+const builtin = @import("builtin");
 const wurl = @import("wurl");
 const clap = @import("clap");
+
+extern "kernel32" fn AttachConsole(process_id: std.os.windows.DWORD) callconv(.winapi) std.os.windows.BOOL;
+const ATTACH_PARENT_PROCESS = std.math.maxInt(std.os.windows.DWORD);
 
 const Error = error{
     NoTool,
@@ -69,6 +73,9 @@ fn launch(gpa: std.mem.Allocator, io: std.Io, config: wurl.config.Config, url: w
 }
 
 pub fn main(init: std.process.Init) !void {
+    if (builtin.os.tag == .windows)
+        _ = AttachConsole(ATTACH_PARENT_PROCESS);
+
     const params = comptime clap.parseParamsComptime(
         \\-h, --help             Display this help and exit.
         \\<URL>                  Handle a protocol string.

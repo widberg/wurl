@@ -8,6 +8,7 @@ fn spawn(io: std.Io, argv: []const []const u8) !void {
         .stdin = .ignore,
         .stdout = .ignore,
         .stderr = .ignore,
+        .create_no_window = true,
     });
 }
 

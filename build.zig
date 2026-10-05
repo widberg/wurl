@@ -30,6 +30,8 @@ pub fn build(b: *std.Build) void {
             },
         }),
     });
+    if (target.result.os.tag == .windows)
+        exe.subsystem = .windows;
 
     b.installArtifact(exe);
 
