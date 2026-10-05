@@ -2,6 +2,19 @@ const std = @import("std");
 const wurl = @import("wurl");
 const clap = @import("clap");
 
+fn load_config(gpa: std.mem.Allocator, arena: std.mem.Allocator, io: std.Io) !wurl.config.Config {
+    const exe_dir = try std.process.executableDirPathAlloc(io, gpa);
+    defer gpa.free(exe_dir);
+
+    const config_path = try std.fs.path.join(gpa, &.{ exe_dir, "wurl.zon" });
+    defer gpa.free(config_path);
+
+    const source = try std.Io.Dir.cwd().readFileAllocOptions(io, config_path, gpa, std.Io.Limit.unlimited, std.mem.Alignment.of(u8), 0);
+    defer gpa.free(source);
+
+    return try wurl.config.parse(gpa, arena, source);
+}
+
 fn find_file_in_config_by_hash_prefix(config: *const wurl.config.Config, hash: []const u8) ?*const wurl.config.File {
     for (config.files) |*file| {
         if (std.ascii.startsWithIgnoreCase(file.hash, hash)) {
@@ -34,30 +47,6 @@ fn launch(gpa: std.mem.Allocator, io: std.Io, config: wurl.config.Config, url: w
     }
 }
 
-const source =
-    \\.{
-    \\  .imhex = "imhex",
-    \\  .vscode = "code",
-    \\  .ghidra = "C:\\Users\\widberg\\AppData\\Local\\gvm\\ghidra_12.1.4_PUBLIC\\support\\GhidraGo\\GhidraGo.bat",
-    \\  .files = .{
-    \\    .{
-    \\      .hash = "abcdef0756152162531abcd",
-    \\      .path = "D:\\programming\\widberg\\wurl\\zig-out\\bin\\wurl.exe",
-    \\      .ghidra = .{
-    \\        .project = .{
-    \\          .non_shared = .{
-    \\            .path = "C:/Users/widberg/Downloads/cars",
-    \\            .name = "cars"
-    \\          }
-    \\        },
-    \\        .program = "default.xex"
-    \\      }
-    \\    }
-    \\  }
-    \\}
-    \\
-;
-
 pub fn main(init: std.process.Init) !void {
     const params = comptime clap.parseParamsComptime(
         \\-h, --help             Display this help and exit.
@@ -84,7 +73,7 @@ pub fn main(init: std.process.Init) !void {
 
     const str = res.positionals[0] orelse unreachable;
 
-    const config = try wurl.config.parse(init.gpa, init.arena.allocator(), source);
+    const config = try load_config(init.gpa, init.arena.allocator(), init.io);
     const url = (try wurl.wurl.parse(init.gpa, str)).value.ok;
     return launch(init.gpa, init.io, config, url);
 }

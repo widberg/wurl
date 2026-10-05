@@ -46,5 +46,29 @@ test "config" {
     defer arena_allocator.deinit();
     const arena = arena_allocator.allocator();
 
-    _ = try parse(gpa, arena, ".{ .imhex = \"imhex\", .vscode = \"code\", .ghidra = \"ghidra\", .files = .{ .{ .hash = \"aaaaa\", .path = \"blah\" }, .{ .hash = \"bbbbb\", .path = \"cry\", .ghidra = .{ .project = . { .non_shared = .{ .path = \"project\", .name = \"project\" } }, .program = \"program\" } } } }");
+    const source =
+        \\.{
+        \\  .imhex = "imhex",
+        \\  .vscode = "code",
+        \\  .ghidra = "C:\\Users\\widberg\\AppData\\Local\\gvm\\ghidra_12.1.4_PUBLIC\\support\\GhidraGo\\GhidraGo.bat",
+        \\  .files = .{
+        \\    .{
+        \\      .hash = "abcdef0756152162531abcd",
+        \\      .path = "D:\\programming\\widberg\\wurl\\zig-out\\bin\\wurl.exe",
+        \\      .ghidra = .{
+        \\        .project = .{
+        \\          .non_shared = .{
+        \\            .path = "C:/Users/widberg/Downloads/cars",
+        \\            .name = "cars"
+        \\          }
+        \\        },
+        \\        .program = "default.xex"
+        \\      }
+        \\    }
+        \\  }
+        \\}
+        \\
+    ;
+
+    _ = try parse(gpa, arena, source);
 }
