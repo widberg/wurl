@@ -34,9 +34,8 @@ pub const Config = struct {
     files: []const File,
 };
 
-pub fn parse(gpa: std.mem.Allocator, arena: std.mem.Allocator, source: [:0]const u8) !Config {
-    var diagnostics: std.zon.parse.Diagnostics = undefined;
-    return std.zon.parse.fromSlice(Config, .{ .gpa = gpa, .arena = arena, .source = source, .diagnostics = &diagnostics, .ignore_unknown_fields = false });
+pub fn parse(gpa: std.mem.Allocator, arena: std.mem.Allocator, source: [:0]const u8, diagnostics: *std.zon.parse.Diagnostics) !Config {
+    return std.zon.parse.fromSlice(Config, .{ .gpa = gpa, .arena = arena, .source = source, .diagnostics = diagnostics, .ignore_unknown_fields = false });
 }
 
 test "config" {
@@ -45,6 +44,8 @@ test "config" {
     var arena_allocator: std.heap.ArenaAllocator = .init(gpa);
     defer arena_allocator.deinit();
     const arena = arena_allocator.allocator();
+
+    var diagnostics: std.zon.parse.Diagnostics = undefined;
 
     const source =
         \\.{
@@ -70,5 +71,6 @@ test "config" {
         \\
     ;
 
-    _ = try parse(gpa, arena, source);
+    _ = try parse(gpa, arena, source, &diagnostics);
+    _ = try std.testing.expectError(error.ParseZon, parse(gpa, arena, "", &diagnostics));
 }
