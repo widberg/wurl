@@ -93,11 +93,10 @@ pub fn main(init: std.process.Init) !void {
         return clap.helpToFile(init.io, .stderr(), clap.Help, &params, .{});
 
     const str = res.positionals[0] orelse unreachable;
-
-    const config = try load_config(init.gpa, init.arena.allocator(), init.io);
     const url = switch ((try wurl.wurl.parse(init.gpa, str)).value) {
         .ok => |url| url,
         .err => return Error.InvalidWurl,
     };
+    const config = try load_config(init.gpa, init.arena.allocator(), init.io);
     return launch(init.gpa, init.io, config, url);
 }
