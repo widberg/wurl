@@ -28,9 +28,9 @@ pub const ConfigFile = struct {
 };
 
 pub const Config = struct {
-    imhex: []const u8,
-    vscode: []const u8,
-    ghidra: []const u8,
+    imhex: ?[]const u8 = null,
+    vscode: ?[]const u8 = null,
+    ghidra: ?[]const u8 = null,
     files: []const ConfigFile,
 };
 

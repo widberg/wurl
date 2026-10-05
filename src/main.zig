@@ -17,16 +17,19 @@ fn launch(gpa: std.mem.Allocator, io: std.Io, config: wurl.config.Config, url: w
 
     switch (url.location.?) {
         .address => |address| {
+            const ghidra = config.ghidra orelse return;
             const config_file_ghidra = file.ghidra orelse return;
-            try wurl.tool.ghidra(gpa, io, config.ghidra, config_file_ghidra, address);
+            try wurl.tool.ghidra(gpa, io, ghidra, config_file_ghidra, address);
         },
         .offset => |offset| {
+            const imhex = config.imhex orelse return;
             const path = file.path orelse return;
-            try wurl.tool.imhex(io, config.imhex, path, offset);
+            try wurl.tool.imhex(io, imhex, path, offset);
         },
         .line_column => |line_column| {
+            const vscode = config.vscode orelse return;
             const path = file.path orelse return;
-            try wurl.tool.vscode(gpa, io, config.vscode, path, line_column);
+            try wurl.tool.vscode(gpa, io, vscode, path, line_column);
         },
     }
 }
