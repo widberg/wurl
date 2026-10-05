@@ -1,37 +1,37 @@
 const std = @import("std");
 
-pub const ConfigFileGhidraProjectShared = struct {
+pub const GhidraProjectShared = struct {
     host: []const u8,
     port: ?u16 = null,
     repository: []const u8,
 };
 
-pub const ConfigFileGhidraProjectNonShared = struct {
+pub const GhidraProjectNonShared = struct {
     path: []const u8,
     name: []const u8,
 };
 
-pub const ConfigFileGhidraProject = union(enum) {
-    shared: ConfigFileGhidraProjectShared,
-    non_shared: ConfigFileGhidraProjectNonShared,
+pub const GhidraProject = union(enum) {
+    shared: GhidraProjectShared,
+    non_shared: GhidraProjectNonShared,
 };
 
-pub const ConfigFileGhidra = struct {
-    project: ConfigFileGhidraProject,
+pub const Ghidra = struct {
+    project: GhidraProject,
     program: []const u8,
 };
 
-pub const ConfigFile = struct {
+pub const File = struct {
     hash: []const u8,
     path: ?[]const u8 = null,
-    ghidra: ?ConfigFileGhidra = null,
+    ghidra: ?Ghidra = null,
 };
 
 pub const Config = struct {
     imhex: ?[]const u8 = null,
     vscode: ?[]const u8 = null,
     ghidra: ?[]const u8 = null,
-    files: []const ConfigFile,
+    files: []const File,
 };
 
 pub fn parse(gpa: std.mem.Allocator, arena: std.mem.Allocator, source: [:0]const u8) !Config {

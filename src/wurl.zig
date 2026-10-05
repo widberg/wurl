@@ -1,20 +1,20 @@
 const std = @import("std");
 const mecha = @import("mecha");
 
-pub const WurlLineColumn = struct {
+pub const LineColumn = struct {
     line: u64,
     column: ?u64,
 };
 
-pub const WurlLocation = union(enum) {
+pub const Location = union(enum) {
     address: ?u64,
     offset: ?u64,
-    line_column: ?WurlLineColumn,
+    line_column: ?LineColumn,
 };
 
 pub const Wurl = struct {
     hash: []const u8,
-    location: ?WurlLocation,
+    location: ?Location,
     extensions: ?[]const u8,
 };
 
@@ -37,12 +37,12 @@ const decimal_number = mecha.int(u64, .{
 const address_location = mecha.combine(.{
     mecha.ascii.char('@').discard(),
     hex_number.opt(),
-}).map(mecha.unionInit(WurlLocation, WurlLocation.address));
+}).map(mecha.unionInit(Location, Location.address));
 
 const offset_location = mecha.combine(.{
     mecha.ascii.char('#').discard(),
     hex_number.opt(),
-}).map(mecha.unionInit(WurlLocation, WurlLocation.offset));
+}).map(mecha.unionInit(Location, Location.offset));
 
 const line_column_location = mecha.combine(.{
     mecha.ascii.char(':').discard(),
@@ -52,8 +52,8 @@ const line_column_location = mecha.combine(.{
             mecha.ascii.char(':').discard(),
             decimal_number,
         }).opt(),
-    }).map(mecha.toStruct(WurlLineColumn)).opt(),
-}).map(mecha.unionInit(WurlLocation, WurlLocation.line_column));
+    }).map(mecha.toStruct(LineColumn)).opt(),
+}).map(mecha.unionInit(Location, Location.line_column));
 
 const location = mecha.oneOf(.{
     address_location,

@@ -2,7 +2,7 @@ const std = @import("std");
 const wurl = @import("wurl");
 const clap = @import("clap");
 
-fn find_file_in_config_by_hash_prefix(config: *const wurl.config.Config, hash: []const u8) ?*const wurl.config.ConfigFile {
+fn find_file_in_config_by_hash_prefix(config: *const wurl.config.Config, hash: []const u8) ?*const wurl.config.File {
     for (config.files) |*file| {
         if (std.ascii.startsWithIgnoreCase(file.hash, hash)) {
             return file;

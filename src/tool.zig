@@ -11,7 +11,7 @@ fn spawn(io: std.Io, argv: []const []const u8) !void {
     });
 }
 
-pub fn ghidra(gpa: std.mem.Allocator, io: std.Io, ghidra_path: []const u8, config_file_ghidra: config.ConfigFileGhidra, address: ?u64) !void {
+pub fn ghidra(gpa: std.mem.Allocator, io: std.Io, ghidra_path: []const u8, config_file_ghidra: config.Ghidra, address: ?u64) !void {
     const project = config_file_ghidra.project;
     const program = config_file_ghidra.program;
 
@@ -54,7 +54,7 @@ pub fn imhex(io: std.Io, imhex_path: []const u8, open_path: []const u8, offset: 
     }
 }
 
-pub fn vscode(gpa: std.mem.Allocator, io: std.Io, vscode_path: []const u8, open_path: []const u8, line_column: ?wurl.WurlLineColumn) !void {
+pub fn vscode(gpa: std.mem.Allocator, io: std.Io, vscode_path: []const u8, open_path: []const u8, line_column: ?wurl.LineColumn) !void {
     var goto = try std.ArrayList(u8).initCapacity(gpa, 0x400);
     defer goto.deinit(gpa);
 
