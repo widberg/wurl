@@ -102,13 +102,21 @@ test "parser" {
     _ = (try url.parse(allocator, "wurl://abcdef0@#?")).value.err;
 }
 
+pub const ConfigFileGhidra = struct {
+    project: []const u8,
+    program: []const u8,
+};
+
 pub const ConfigFile = struct {
     hash: []const u8,
     path: []const u8,
+    ghidra: ?ConfigFileGhidra = null,
 };
 
 pub const Config = struct {
     imhex: []const u8,
+    vscode: []const u8,
+    ghidra: []const u8,
     files: []const ConfigFile,
 };
 
@@ -124,5 +132,5 @@ test "config" {
     defer arena_allocator.deinit();
     const arena = arena_allocator.allocator();
 
-    _ = try config(gpa, arena, ".{ .imhex = \"imhex\", .files = .{ .{ .hash = \"aaaaa\", .path = \"blah\" } } }");
+    _ = try config(gpa, arena, ".{ .imhex = \"imhex\", .vscode = \"code\", .ghidra = \"ghidra\", .files = .{ .{ .hash = \"aaaaa\", .path = \"blah\" }, .{ .hash = \"bbbbb\", .path = \"cry\", .ghidra = .{ .project = \"project\", .program = \"program\" } } } }");
 }
