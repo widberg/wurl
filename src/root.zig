@@ -1,33 +1,30 @@
-//! By convention, root.zig is the root source file when making a package.
 const std = @import("std");
-const Io = std.Io;
-
 const mecha = @import("mecha");
 
-const WurlAddressLocation = struct {
+pub const WurlAddressLocation = struct {
     address: ?u64,
 };
 
-const WurlOffsetLocation = struct {
+pub const WurlOffsetLocation = struct {
     offset: ?u64,
 };
 
-const WurlLineColumn = struct {
+pub const WurlLineColumn = struct {
     line: u64,
     column: ?u64,
 };
 
-const WurlLineColumnLocation = struct {
+pub const WurlLineColumnLocation = struct {
     line_column: ?WurlLineColumn,
 };
 
-const WurlLocation = union(enum) {
+pub const WurlLocation = union(enum) {
     address: WurlAddressLocation,
     offset: WurlOffsetLocation,
     line_column: WurlLineColumnLocation,
 };
 
-const Wurl = struct {
+pub const Wurl = struct {
     hash: []const u8,
     location: ?WurlLocation,
     extensions: ?[]const u8,
@@ -84,17 +81,23 @@ const extensions = mecha.combine(.{
 const url = mecha.combine(.{ mecha.string("wurl://").discard(), hash, location, extensions, mecha.eos }).map(mecha.toStruct(Wurl));
 
 pub fn parse(allocator: std.mem.Allocator, str: []const u8) mecha.Error!mecha.Result(Wurl) {
-    return try url.parse(allocator, str);
+    return url.parse(allocator, str);
 }
 
 test "parser" {
     const testing = std.testing;
     const allocator = testing.allocator;
 
-    _ = (try url.parse(allocator, "wurl://abcdef0@0")).value.ok;
-    _ = (try url.parse(allocator, "wurl://abcdef0@0?")).value.ok;
-    _ = (try url.parse(allocator, "wurl://abcdef0")).value.ok;
-    _ = (try url.parse(allocator, "wurl://abcdef0@0?aaaaa")).value.ok;
-    _ = (try url.parse(allocator, "wurl://abcdef0?aaaaa")).value.ok;
+    _ = try testing.expectEqualDeep((try url.parse(allocator, "wurl://abcdef0@0")).value.ok, Wurl{ .hash = "abcdef0", .location = .{ .address = .{ .address = 0 } }, .extensions = null });
+    _ = try testing.expectEqualDeep((try url.parse(allocator, "wurl://abcdef0@0?")).value.ok, Wurl{ .hash = "abcdef0", .location = .{ .address = .{ .address = 0 } }, .extensions = "" });
+    _ = try testing.expectEqualDeep((try url.parse(allocator, "wurl://abcdef0")).value.ok, Wurl{ .hash = "abcdef0", .location = null, .extensions = null });
+    _ = try testing.expectEqualDeep((try url.parse(allocator, "wurl://abcdef0@0?aaaaa")).value.ok, Wurl{ .hash = "abcdef0", .location = .{ .address = .{ .address = 0 } }, .extensions = "aaaaa" });
+    _ = try testing.expectEqualDeep((try url.parse(allocator, "wurl://abcdef0@?aaaaa")).value.ok, Wurl{ .hash = "abcdef0", .location = .{ .address = .{ .address = null } }, .extensions = "aaaaa" });
+    _ = try testing.expectEqualDeep((try url.parse(allocator, "wurl://abcdef0?aaaaa")).value.ok, Wurl{ .hash = "abcdef0", .location = null, .extensions = "aaaaa" });
+
     _ = (try url.parse(allocator, "")).value.err;
+    _ = (try url.parse(allocator, "asdasds://abcdef0")).value.err;
+    _ = (try url.parse(allocator, "wurl://")).value.err;
+    _ = (try url.parse(allocator, "wurl://?")).value.err;
+    _ = (try url.parse(allocator, "wurl://abcdef0@#?")).value.err;
 }

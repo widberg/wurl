@@ -54,7 +54,6 @@ pub fn build(b: *std.Build) void {
             // can be extremely useful in case of collisions (which can happen
             // importing modules from different packages).
             .{ .name = "mecha", .module = mecha_mod },
-            .{ .name = "clap", .module = clap_mod },
         },
     });
 
@@ -96,7 +95,6 @@ pub fn build(b: *std.Build) void {
                 // can be extremely useful in case of collisions (which can happen
                 // importing modules from different packages).
                 .{ .name = "wurl", .module = mod },
-                .{ .name = "mecha", .module = mecha_mod },
                 .{ .name = "clap", .module = clap_mod },
             },
         }),
