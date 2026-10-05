@@ -11,30 +11,32 @@ fn spawn(io: std.Io, argv: []const []const u8) !void {
     });
 }
 
-fn ghidra(io: std.Io, ghidra_path: []const u8, open_path: []const u8, address: u64) !void {
-    _ = io;
-    _ = ghidra_path;
-    _ = open_path;
-    _ = address;
+fn ghidra(gpa: std.mem.Allocator, io: std.Io, ghidra_path: []const u8, config_file_ghidra: wurl.ConfigFileGhidra, address: u64) !void {
+    const project = config_file_ghidra.project;
+    const program = config_file_ghidra.program;
+    const url = try std.fmt.allocPrint(gpa, "ghidra:/{s}?/{s}#0x{x}", .{ project, program, address });
+    const argv = [_][]const u8{ ghidra_path, url };
+    try spawn(io, &argv);
+    gpa.free(url);
 }
 
 fn imhex(io: std.Io, imhex_path: []const u8, open_path: []const u8, offset: u64) !void {
     const offset_str = "0x" ++ std.fmt.hex(offset);
     const argv = [_][]const u8{ imhex_path, "--open", open_path, "--select", offset_str };
-    return spawn(io, &argv);
+    try spawn(io, &argv);
 }
 
 fn vscode(gpa: std.mem.Allocator, io: std.Io, vscode_path: []const u8, open_path: []const u8, line: u64, column: u64) !void {
     const open = try std.fmt.allocPrint(gpa, "{s}:{d}:{d}", .{ open_path, line, column });
     const argv = [_][]const u8{ vscode_path, "--goto", open };
-    _ = try spawn(io, &argv);
+    try spawn(io, &argv);
     gpa.free(open);
 }
 
-fn find_file_in_config_by_hash_prefix(config: wurl.Config, hash: []const u8) ?*const wurl.ConfigFile {
-    for (config.files) |file| {
+fn find_file_in_config_by_hash_prefix(config: *const wurl.Config, hash: []const u8) ?*const wurl.ConfigFile {
+    for (config.files) |*file| {
         if (std.ascii.startsWithIgnoreCase(file.hash, hash)) {
-            return &file;
+            return file;
         }
     }
 
@@ -42,22 +44,25 @@ fn find_file_in_config_by_hash_prefix(config: wurl.Config, hash: []const u8) ?*c
 }
 
 fn launch(gpa: std.mem.Allocator, io: std.Io, config: wurl.Config, url: wurl.Wurl) !void {
-    const file = find_file_in_config_by_hash_prefix(config, url.hash) orelse return;
+    const file = find_file_in_config_by_hash_prefix(&config, url.hash) orelse return;
 
     switch (url.location.?) {
         .address => |address_location| {
+            const config_file_ghidra = file.ghidra orelse return;
             const address = address_location.address orelse 0;
-            return ghidra(io, config.ghidra, file.path, address);
+            try ghidra(gpa, io, config.ghidra, config_file_ghidra, address);
         },
         .offset => |offset_location| {
+            const path = file.path orelse return;
             const offset = offset_location.offset orelse 0;
-            return imhex(io, config.imhex, file.path, offset);
+            try imhex(io, config.imhex, path, offset);
         },
         .line_column => |line_column_location| {
+            const path = file.path orelse return;
             const line_column = line_column_location.line_column orelse wurl.WurlLineColumn{ .line = 0, .column = null };
             const line = line_column.line;
             const column = line_column.column orelse 0;
-            return vscode(gpa, io, config.vscode, file.path, line, column);
+            try vscode(gpa, io, config.vscode, path, line, column);
         },
     }
 }
@@ -66,11 +71,15 @@ const source =
     \\.{
     \\  .imhex = "imhex",
     \\  .vscode = "code",
-    \\  .ghidra = "C:\Users\widberg\AppData\Local\gvm\ghidra_12.1.4_PUBLIC\ghidraRun.bat",
+    \\  .ghidra = "C:\\Users\\widberg\\AppData\\Local\\gvm\\ghidra_12.1.4_PUBLIC\\support\\GhidraGo\\GhidraGo.bat",
     \\  .files = .{
     \\    .{
     \\      .hash = "abcdef0756152162531abcd",
     \\      .path = "D:\\programming\\widberg\\wurl\\zig-out\\bin\\wurl.exe",
+    \\      .ghidra = .{
+    \\        .project = "C:/Users/widberg/Downloads/cars/cars",
+    \\        .program = "default.xex"
+    \\      }
     \\    }
     \\  }
     \\}
@@ -100,8 +109,9 @@ pub fn main(init: std.process.Init) !void {
 
         std.debug.print("{any}\n", .{config});
         std.debug.print("{any}\n", .{url});
-        return launch(init.gpa, init.io, config, url);
+        try launch(init.gpa, init.io, config, url);
+        return;
     }
 
-    return clap.helpToFile(init.io, .stderr(), clap.Help, &params, .{});
+    try clap.helpToFile(init.io, .stderr(), clap.Help, &params, .{});
 }

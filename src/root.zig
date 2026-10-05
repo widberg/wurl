@@ -109,7 +109,7 @@ pub const ConfigFileGhidra = struct {
 
 pub const ConfigFile = struct {
     hash: []const u8,
-    path: []const u8,
+    path: ?[]const u8 = null,
     ghidra: ?ConfigFileGhidra = null,
 };
 
