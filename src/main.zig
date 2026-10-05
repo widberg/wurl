@@ -61,12 +61,16 @@ const source =
 pub fn main(init: std.process.Init) !void {
     const params = comptime clap.parseParamsComptime(
         \\-h, --help             Display this help and exit.
-        \\<str>                  Handle a protocol string.
+        \\<URL>                  Handle a protocol string.
         \\
     );
 
+    const parsers = comptime .{
+        .URL = clap.parsers.string,
+    };
+
     var diag = clap.Diagnostic{};
-    var res = clap.parse(clap.Help, &params, clap.parsers.default, init.minimal.args, .{
+    var res = clap.parse(clap.Help, &params, parsers, init.minimal.args, .{
         .diagnostic = &diag,
         .allocator = init.gpa,
     }) catch |err| {
@@ -75,12 +79,12 @@ pub fn main(init: std.process.Init) !void {
     };
     defer res.deinit();
 
-    if (res.positionals[0]) |str| {
-        const config = try wurl.config.parse(init.gpa, init.arena.allocator(), source);
-        const url = (try wurl.wurl.parse(init.gpa, str)).value.ok;
-        try launch(init.gpa, init.io, config, url);
-        return;
-    }
+    if (res.args.help != 0 or res.positionals[0] == null)
+        return clap.helpToFile(init.io, .stderr(), clap.Help, &params, .{});
 
-    try clap.helpToFile(init.io, .stderr(), clap.Help, &params, .{});
+    const str = res.positionals[0] orelse unreachable;
+
+    const config = try wurl.config.parse(init.gpa, init.arena.allocator(), source);
+    const url = (try wurl.wurl.parse(init.gpa, str)).value.ok;
+    return launch(init.gpa, init.io, config, url);
 }
