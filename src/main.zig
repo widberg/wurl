@@ -42,16 +42,32 @@ fn ghidra(gpa: std.mem.Allocator, io: std.Io, ghidra_path: []const u8, config_fi
     try spawn(io, &argv);
 }
 
-fn imhex(io: std.Io, imhex_path: []const u8, open_path: []const u8, offset: u64) !void {
-    const offset_str = "0x" ++ std.fmt.hex(offset);
-    const argv = [_][]const u8{ imhex_path, "--open", open_path, "--select", offset_str };
-    try spawn(io, &argv);
+fn imhex(io: std.Io, imhex_path: []const u8, open_path: []const u8, offset: ?u64) !void {
+    const argv_prefix = [_][]const u8{ imhex_path, "--open", open_path };
+    if (offset) |off| {
+        const offset_str = "0x" ++ std.fmt.hex(off);
+        const argv = argv_prefix ++ [_][]const u8{ "--select", offset_str };
+        try spawn(io, &argv);
+    } else {
+        const argv = argv_prefix;
+        try spawn(io, &argv);
+    }
 }
 
-fn vscode(gpa: std.mem.Allocator, io: std.Io, vscode_path: []const u8, open_path: []const u8, line: u64, column: u64) !void {
-    const open = try std.fmt.allocPrint(gpa, "{s}:{d}:{d}", .{ open_path, line, column });
-    defer gpa.free(open);
-    const argv = [_][]const u8{ vscode_path, "--goto", open };
+fn vscode(gpa: std.mem.Allocator, io: std.Io, vscode_path: []const u8, open_path: []const u8, line_column: ?wurl.WurlLineColumn) !void {
+    var goto = try std.ArrayList(u8).initCapacity(gpa, 0x400);
+    defer goto.deinit(gpa);
+
+    try goto.appendSlice(gpa, open_path);
+
+    if (line_column) |l_c| {
+        try goto.print(gpa, ":{d}", .{l_c.line});
+        if (l_c.column) |column| {
+            try goto.print(gpa, ":{d}", .{column});
+        }
+    }
+
+    const argv = [_][]const u8{ vscode_path, "--goto", goto.items };
     try spawn(io, &argv);
 }
 
@@ -75,15 +91,11 @@ fn launch(gpa: std.mem.Allocator, io: std.Io, config: wurl.Config, url: wurl.Wur
         },
         .offset => |offset_location| {
             const path = file.path orelse return;
-            const offset = offset_location.offset orelse 0;
-            try imhex(io, config.imhex, path, offset);
+            try imhex(io, config.imhex, path, offset_location.offset);
         },
         .line_column => |line_column_location| {
             const path = file.path orelse return;
-            const line_column = line_column_location.line_column orelse wurl.WurlLineColumn{ .line = 0, .column = null };
-            const line = line_column.line;
-            const column = line_column.column orelse 0;
-            try vscode(gpa, io, config.vscode, path, line, column);
+            try vscode(gpa, io, config.vscode, path, line_column_location.line_column);
         },
     }
 }
