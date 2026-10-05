@@ -28,7 +28,9 @@ fn find_file_in_config_by_hash_prefix(config: *const wurl.config.Config, hash: [
 fn launch(gpa: std.mem.Allocator, io: std.Io, config: wurl.config.Config, url: wurl.wurl.Wurl) !void {
     const file = find_file_in_config_by_hash_prefix(&config, url.hash) orelse return;
 
-    switch (url.location.?) {
+    const location = url.location orelse wurl.wurl.Location{ .address = null };
+
+    switch (location) {
         .address => |address| {
             const ghidra = config.ghidra orelse return;
             const config_file_ghidra = file.ghidra orelse return;
@@ -37,7 +39,7 @@ fn launch(gpa: std.mem.Allocator, io: std.Io, config: wurl.config.Config, url: w
         .offset => |offset| {
             const imhex = config.imhex orelse return;
             const path = file.path orelse return;
-            try wurl.tool.imhex(io, imhex, path, offset);
+            try wurl.tool.imhex(gpa, io, imhex, path, offset);
         },
         .line_column => |line_column| {
             const vscode = config.vscode orelse return;

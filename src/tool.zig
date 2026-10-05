@@ -42,16 +42,22 @@ pub fn ghidra(gpa: std.mem.Allocator, io: std.Io, ghidra_path: []const u8, confi
     try spawn(io, &argv);
 }
 
-pub fn imhex(io: std.Io, imhex_path: []const u8, open_path: []const u8, offset: ?u64) !void {
-    const argv_prefix = [_][]const u8{ imhex_path, "--open", open_path };
+pub fn imhex(gpa: std.mem.Allocator, io: std.Io, imhex_path: []const u8, open_path: []const u8, offset: ?u64) !void {
+    var argv = try std.ArrayList([]const u8).initCapacity(gpa, 0x10);
+    defer argv.deinit(gpa);
+
+    try argv.appendSlice(gpa, &[_][]const u8{ imhex_path, "--open", open_path });
+
+    var maybe_offset_str: ?[]const u8 = null;
+    defer if (maybe_offset_str) |offset_str| gpa.free(offset_str);
+
     if (offset) |off| {
-        const offset_str = "0x" ++ std.fmt.hex(off);
-        const argv = argv_prefix ++ [_][]const u8{ "--select", offset_str };
-        try spawn(io, &argv);
-    } else {
-        const argv = argv_prefix;
-        try spawn(io, &argv);
+        const offset_str = try std.fmt.allocPrint(gpa, "0x{x}", .{off});
+        maybe_offset_str = offset_str;
+        try argv.appendSlice(gpa, &[_][]const u8{ "--select", offset_str });
     }
+
+    try spawn(io, argv.items);
 }
 
 pub fn vscode(gpa: std.mem.Allocator, io: std.Io, vscode_path: []const u8, open_path: []const u8, line_column: ?wurl.LineColumn) !void {
