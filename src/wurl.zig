@@ -66,7 +66,7 @@ const extensions = mecha.combine(.{
     mecha.rest,
 }).opt();
 
-const url = mecha.combine(.{ mecha.string("wurl://").discard(), hash, location, extensions, mecha.eos }).map(mecha.toStruct(Wurl));
+const url = mecha.combine(.{ mecha.string("wurl:").discard(), hash, location, extensions, mecha.eos }).map(mecha.toStruct(Wurl));
 
 pub fn parse(allocator: std.mem.Allocator, str: []const u8) mecha.Error!mecha.Result(Wurl) {
     return url.parse(allocator, str);
@@ -76,17 +76,17 @@ test "parser" {
     const testing = std.testing;
     const allocator = testing.allocator;
 
-    _ = try testing.expectEqualDeep((try url.parse(allocator, "wurl://abcdef0@0")).value.ok, Wurl{ .hash = "abcdef0", .location = .{ .address = 0 }, .extensions = null });
-    _ = try testing.expectEqualDeep((try url.parse(allocator, "wurl://abcdef0@0?")).value.ok, Wurl{ .hash = "abcdef0", .location = .{ .address = 0 }, .extensions = "" });
-    _ = try testing.expectEqualDeep((try url.parse(allocator, "wurl://abcdef0")).value.ok, Wurl{ .hash = "abcdef0", .location = null, .extensions = null });
-    _ = try testing.expectEqualDeep((try url.parse(allocator, "wurl://abcdef0@0?aaaaa")).value.ok, Wurl{ .hash = "abcdef0", .location = .{ .address = 0 }, .extensions = "aaaaa" });
-    _ = try testing.expectEqualDeep((try url.parse(allocator, "wurl://abcdef0@?aaaaa")).value.ok, Wurl{ .hash = "abcdef0", .location = .{ .address = null }, .extensions = "aaaaa" });
-    _ = try testing.expectEqualDeep((try url.parse(allocator, "wurl://abcdef0?aaaaa")).value.ok, Wurl{ .hash = "abcdef0", .location = null, .extensions = "aaaaa" });
+    _ = try testing.expectEqualDeep((try url.parse(allocator, "wurl:abcdef0@0")).value.ok, Wurl{ .hash = "abcdef0", .location = .{ .address = 0 }, .extensions = null });
+    _ = try testing.expectEqualDeep((try url.parse(allocator, "wurl:abcdef0@0?")).value.ok, Wurl{ .hash = "abcdef0", .location = .{ .address = 0 }, .extensions = "" });
+    _ = try testing.expectEqualDeep((try url.parse(allocator, "wurl:abcdef0")).value.ok, Wurl{ .hash = "abcdef0", .location = null, .extensions = null });
+    _ = try testing.expectEqualDeep((try url.parse(allocator, "wurl:abcdef0@0?aaaaa")).value.ok, Wurl{ .hash = "abcdef0", .location = .{ .address = 0 }, .extensions = "aaaaa" });
+    _ = try testing.expectEqualDeep((try url.parse(allocator, "wurl:abcdef0@?aaaaa")).value.ok, Wurl{ .hash = "abcdef0", .location = .{ .address = null }, .extensions = "aaaaa" });
+    _ = try testing.expectEqualDeep((try url.parse(allocator, "wurl:abcdef0?aaaaa")).value.ok, Wurl{ .hash = "abcdef0", .location = null, .extensions = "aaaaa" });
 
     _ = (try url.parse(allocator, "")).value.err;
     _ = (try url.parse(allocator, "asdasds://abcdef0")).value.err;
-    _ = (try url.parse(allocator, "wurl://")).value.err;
-    _ = (try url.parse(allocator, "wurl://?")).value.err;
-    _ = (try url.parse(allocator, "wurl://@0")).value.err;
-    _ = (try url.parse(allocator, "wurl://abcdef0@#?")).value.err;
+    _ = (try url.parse(allocator, "wurl:")).value.err;
+    _ = (try url.parse(allocator, "wurl:?")).value.err;
+    _ = (try url.parse(allocator, "wurl:@0")).value.err;
+    _ = (try url.parse(allocator, "wurl:abcdef0@#?")).value.err;
 }
