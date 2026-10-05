@@ -11,13 +11,35 @@ fn spawn(io: std.Io, argv: []const []const u8) !void {
     });
 }
 
-fn ghidra(gpa: std.mem.Allocator, io: std.Io, ghidra_path: []const u8, config_file_ghidra: wurl.ConfigFileGhidra, address: u64) !void {
+fn ghidra(gpa: std.mem.Allocator, io: std.Io, ghidra_path: []const u8, config_file_ghidra: wurl.ConfigFileGhidra, address: ?u64) !void {
     const project = config_file_ghidra.project;
     const program = config_file_ghidra.program;
-    const url = try std.fmt.allocPrint(gpa, "ghidra:/{s}?/{s}#0x{x}", .{ project, program, address });
-    const argv = [_][]const u8{ ghidra_path, url };
+
+    var url = try std.ArrayList(u8).initCapacity(gpa, 0x400);
+    defer url.deinit(gpa);
+
+    try url.print(gpa, "ghidra:/", .{});
+
+    switch (project) {
+        .shared => |shared| {
+            const repository = shared.repository;
+            try url.print(gpa, "/{s}", .{shared.host});
+            if (shared.port) |port| {
+                try url.print(gpa, ":{d}", .{port});
+            }
+            try url.print(gpa, "/{s}/{s}", .{ repository, program });
+        },
+        .non_shared => |non_shared| {
+            try url.print(gpa, "{s}/{s}?/{s}", .{ non_shared.path, non_shared.name, program });
+        },
+    }
+
+    if (address) |addr| {
+        try url.print(gpa, "#0x{x}", .{addr});
+    }
+
+    const argv = [_][]const u8{ ghidra_path, url.items };
     try spawn(io, &argv);
-    gpa.free(url);
 }
 
 fn imhex(io: std.Io, imhex_path: []const u8, open_path: []const u8, offset: u64) !void {
@@ -28,9 +50,9 @@ fn imhex(io: std.Io, imhex_path: []const u8, open_path: []const u8, offset: u64)
 
 fn vscode(gpa: std.mem.Allocator, io: std.Io, vscode_path: []const u8, open_path: []const u8, line: u64, column: u64) !void {
     const open = try std.fmt.allocPrint(gpa, "{s}:{d}:{d}", .{ open_path, line, column });
+    defer gpa.free(open);
     const argv = [_][]const u8{ vscode_path, "--goto", open };
     try spawn(io, &argv);
-    gpa.free(open);
 }
 
 fn find_file_in_config_by_hash_prefix(config: *const wurl.Config, hash: []const u8) ?*const wurl.ConfigFile {
@@ -49,8 +71,7 @@ fn launch(gpa: std.mem.Allocator, io: std.Io, config: wurl.Config, url: wurl.Wur
     switch (url.location.?) {
         .address => |address_location| {
             const config_file_ghidra = file.ghidra orelse return;
-            const address = address_location.address orelse 0;
-            try ghidra(gpa, io, config.ghidra, config_file_ghidra, address);
+            try ghidra(gpa, io, config.ghidra, config_file_ghidra, address_location.address);
         },
         .offset => |offset_location| {
             const path = file.path orelse return;
@@ -77,7 +98,12 @@ const source =
     \\      .hash = "abcdef0756152162531abcd",
     \\      .path = "D:\\programming\\widberg\\wurl\\zig-out\\bin\\wurl.exe",
     \\      .ghidra = .{
-    \\        .project = "C:/Users/widberg/Downloads/cars/cars",
+    \\        .project = .{
+    \\          .non_shared = .{
+    \\            .path = "C:/Users/widberg/Downloads/cars",
+    \\            .name = "cars"
+    \\          }
+    \\        },
     \\        .program = "default.xex"
     \\      }
     \\    }
@@ -106,9 +132,6 @@ pub fn main(init: std.process.Init) !void {
     if (res.positionals[0]) |str| {
         const config = try wurl.config(init.gpa, init.arena.allocator(), source);
         const url = (try wurl.parse(init.gpa, str)).value.ok;
-
-        std.debug.print("{any}\n", .{config});
-        std.debug.print("{any}\n", .{url});
         try launch(init.gpa, init.io, config, url);
         return;
     }

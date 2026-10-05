@@ -102,8 +102,24 @@ test "parser" {
     _ = (try url.parse(allocator, "wurl://abcdef0@#?")).value.err;
 }
 
+pub const ConfigFileGhidraProjectShared = struct {
+    host: []const u8,
+    port: ?u16 = null,
+    repository: []const u8,
+};
+
+pub const ConfigFileGhidraProjectNonShared = struct {
+    path: []const u8,
+    name: []const u8,
+};
+
+pub const ConfigFileGhidraProject = union(enum) {
+    shared: ConfigFileGhidraProjectShared,
+    non_shared: ConfigFileGhidraProjectNonShared,
+};
+
 pub const ConfigFileGhidra = struct {
-    project: []const u8,
+    project: ConfigFileGhidraProject,
     program: []const u8,
 };
 
@@ -132,5 +148,5 @@ test "config" {
     defer arena_allocator.deinit();
     const arena = arena_allocator.allocator();
 
-    _ = try config(gpa, arena, ".{ .imhex = \"imhex\", .vscode = \"code\", .ghidra = \"ghidra\", .files = .{ .{ .hash = \"aaaaa\", .path = \"blah\" }, .{ .hash = \"bbbbb\", .path = \"cry\", .ghidra = .{ .project = \"project\", .program = \"program\" } } } }");
+    _ = try config(gpa, arena, ".{ .imhex = \"imhex\", .vscode = \"code\", .ghidra = \"ghidra\", .files = .{ .{ .hash = \"aaaaa\", .path = \"blah\" }, .{ .hash = \"bbbbb\", .path = \"cry\", .ghidra = .{ .project = . { .non_shared = .{ .path = \"project\", .name = \"project\" } }, .program = \"program\" } } } }");
 }
