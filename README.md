@@ -42,12 +42,15 @@ https://docs.oracle.com/javase/tutorial/java/package/namingpkgs.html
 
 https://git-scm.com/book/en/v2/Git-Tools-Revision-Selection
 
+You can refer generally to a file when the location isn't important by omitting the location, `wurl:e02b9c3`.
+
 ### Location
 
-
+A location optionally follows the file hash and identifies a place in that file. The location starts with a location type,  which is followed by the location-type-specific information.
 
 #### Address
 
+The address location type is denoted by the `@` character.
 
 programs with multiple address spaces. aaaa@lowbus:0000100 maybe?
 
@@ -55,11 +58,11 @@ This idea of an address as a single number is [deeply flawed](https://github.com
 
 #### Offset
 
-
+The address location type is denoted by the `#` character. The location-type-specific information is an offset from the beginning of the file, as capitalized hexadecimal, without a `0x` prefix, and zero padded to the number of digits in the highest possible offset.
 
 #### Line and Column
 
-
+The address location type is denoted by the `#` character. The location-type-specific information is a line number and optionally a column number, separated by another `:`, both as decimal and 1-based. Examples: `5b651ba:15`, `5b651ba:3:4`. I'm not going to recommend zero padding these since it makes them so much uglier and harder to read, even though by not padding them, some reasonable sorts might place the single digit lines after the double digits.
 
 ### Extensions
 
