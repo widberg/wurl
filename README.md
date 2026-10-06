@@ -4,7 +4,62 @@ Wurl protocol specification and reference implementation.
 
 ## Motivation
 
+Widberg Uniform Resource Locator
 
+I find myself in need of a way to refer to disparate files and locations within those files in a compact, unambiguous, universal, timeless, and normalized form. This would be useful while editing this wiki, collaborating with others, and leaving notes for my future self.
+
+## Requirements
+
+* Disparate files: can handle executables, libraries, binary resources, text, etc...
+* Compact: as short as possible while still accomplishing the other requirements.
+* Unambiguous: a reference should be understood without sharing additional context.
+* Universal: two people with different project configurations should understand a reference the same.
+* Timeless: references should not need to be updated when information is learned or forgotten.
+* Normalized: only one valid representation of any given reference.
+
+## Prior Art
+
+One way to attempt to do this is in prose: "In `FUEL.exe` from the Russian release at address `0x009A8310`." This doesn't really hold up: (1) it is far from compact, (2) if a second Russian release disk is found, it becomes ambiguous which executable is being referred to, (3) there are many valid ways to write a sentence to convey that information, so it is not normalized.
+
+Another way is to use your software reverse engineering toolkit's protocol handler functionality: [`ghidra://` (GhidraGo)](https://www.ghidradocs.com/12.1.4_PUBLIC/help/GhidraGo/help/topics/GhidraGo/GhidraGo.html), [`binaryninja://`](https://docs.binary.ninja/guide/index.html#loading-files), and [`ida://` (Heimdallr)](https://www.interruptlabs.co.uk/articles/heimdallr-a-way-to-integrate-ida-pro-into-obsidian-notes). These are certainly a step in the right direction, but they still don't meet all my requirements: (1) 
+
+codex.exe file.txt:10:2
+imhex.exe --open file.bin --select 10
+
+https://docs.oracle.com/javase/tutorial/java/package/namingpkgs.html
+
+https://git-scm.com/book/en/v2/Git-Tools-Revision-Selection
+
+## Addresses
+
+## Offsets
+
+imhex
+
+@
+#
+:
+
+wurl://
+
+
+https://en.wikipedia.org/wiki/Robustness_principle
+
+extensions after "?"
+
+encourage customization
+
+The extension stuff should not be vital to understanding. it should be safe to hide that in the link and not visible in the text. something like the view equals thing from the Ida extension
+
+ranges by separating with a "-" and multiple selection by separating with commas
+
+
+who is this for? me. I am not pitching this as a standard. I'm just making something that I plan on using public. I have no aspirations of this being a standard
+
+
+programs with multiple address spaces. aaaa@lowbus:0000100 maybe?
+
+https://github.com/iximeow/yaxpeax-arch/issues/8#issuecomment-4682404862
 
 ## Specification
 
