@@ -2,29 +2,38 @@
 
 Wurl protocol specification and reference implementation.
 
+## What is Wurl?
+
+Wurl is a URI for sharing references to resources among members of a reverse engineering project.
+
 ## Motivation
 
-Widberg Uniform Resource Locator
+I find myself in need of a way to refer to disparate files and locations within those files in a compact, universal, timeless, and normalized form. This would be useful while editing wikis, collaborating with others, and leaving notes for my future self.
 
-I find myself in need of a way to refer to disparate files and locations within those files in a compact, unambiguous, universal, timeless, and normalized form. This would be useful while editing this wiki, collaborating with others, and leaving notes for my future self.
-
-## Requirements
+### Requirements
 
 * Disparate files: can handle executables, libraries, binary resources, text, etc...
 * Compact: as short as possible while still accomplishing the other requirements.
-* Unambiguous: a reference should be understood without sharing additional context.
 * Universal: two people with different project configurations should understand a reference the same.
 * Timeless: references should not need to be updated when information is learned or forgotten.
 * Normalized: only one valid representation of any given reference.
 
-## Prior Art
+It should be easy to accept that each of those requirements have an objective measure. I also want to tack on that I would prefer the references be pleasant to look at, but I admit that is entirely subjective and up to my own preferences.
 
-One way to attempt to do this is in prose: "In `FUEL.exe` from the Russian release at address `0x009A8310`." This doesn't really hold up: (1) it is far from compact, (2) if a second Russian release disk is found, it becomes ambiguous which executable is being referred to, (3) there are many valid ways to write a sentence to convey that information, so it is not normalized.
+### Prior Art
 
-Another way is to use your software reverse engineering toolkit's protocol handler functionality: [`ghidra://` (GhidraGo)](https://www.ghidradocs.com/12.1.4_PUBLIC/help/GhidraGo/help/topics/GhidraGo/GhidraGo.html), [`binaryninja://`](https://docs.binary.ninja/guide/index.html#loading-files), and [`ida://` (Heimdallr)](https://www.interruptlabs.co.uk/articles/heimdallr-a-way-to-integrate-ida-pro-into-obsidian-notes). These are certainly a step in the right direction, but they still don't meet all my requirements: (1) 
+One way to attempt to do this is in prose: "In `FUEL.exe` from the Russian release at address `0x009A8310`." This doesn't really hold up: (1) it is far from compact, (2) if a second Russian release disk is found, it becomes ambiguous which executable is being referred to, and (3) there are many valid ways to write a sentence to convey that information, so it is not normalized.
 
-codex.exe file.txt:10:2
-imhex.exe --open file.bin --select 10
+Another way is to use your software reverse engineering toolkit's protocol handler functionality: [`ghidra:` (GhidraGo)](https://www.ghidradocs.com/12.1.4_PUBLIC/help/GhidraGo/help/topics/GhidraGo/GhidraGo.html), [`binaryninja:`](https://docs.binary.ninja/guide/index.html#loading-files), and [`ida:` (Heimdallr)](https://www.interruptlabs.co.uk/articles/heimdallr-a-way-to-integrate-ida-pro-into-obsidian-notes). These are certainly a step in the right direction, but they still don't meet all my requirements: (1) it isn't universal since I can't share a link to my Ghidra project with someone using Binary Ninja, and maybe not even someone else using Ghidra if the link uses a symbol name they don't have in their project or their project is at a different path on their computer than mine, (2) they aren't timeless; if I win the lottery tomorrow and buy IDA Pro I'll have to pay someone go update all my links too, and (3) there are many ways to refer to the same location with these protocols (address, section + offset, label), so it is not normalized.
+
+The protocol strings themselves are not compact but since they are proper protocols you can hide them behind text and write something like: "[...] and that thing happens [here](https://www.youtube.com/watch?v=QREQ4F-CT8M)." So they get a pass from me, at least in places where you're viewing the rendered page more often than the Markdown. And some of the universality concerns can be solved by having everyone in a community agree to use the same Ghidra server, but servers go down and move, so that's not a complete solution.
+
+Finally, some editors allow you to run them with arguments to open a file with the cursor at a specified position, e.g. `code.exe --goto file.txt:10:2` or `imhex.exe --open file.bin --select 0x10` (you can't actually combine `open` with `select` in ImHex right now). This suffers all of the same flaws as the SRE toolkit protocols with the added drawback that they aren't clickable.
+
+So, there are plenty of good solutions that would work without issue if you were working on a short lived project alone or in a small group with shared preferences and confidence in their tool choices. Everything I mentioned has a purpose and serves it well, I just need something with a different purpose to fulfil my requirements.
+
+## Specification
+
 
 https://docs.oracle.com/javase/tutorial/java/package/namingpkgs.html
 
@@ -60,9 +69,6 @@ who is this for? me. I am not pitching this as a standard. I'm just making somet
 programs with multiple address spaces. aaaa@lowbus:0000100 maybe?
 
 https://github.com/iximeow/yaxpeax-arch/issues/8#issuecomment-4682404862
-
-## Specification
-
 
 
 ## Reference Implementation
