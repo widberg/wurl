@@ -1,9 +1,5 @@
 # Wurl
 
-Wurl URI scheme specification and reference implementation.
-
-## What is Wurl?
-
 Wurl is a URI scheme for sharing references to resources among members of a reverse engineering project.
 
 ## Motivation
@@ -36,13 +32,19 @@ So, there are plenty of good solutions that would work without issue if you were
 
 Wurl URIs start with the `wurl:` scheme. The scheme-specific part is human readable and writeable, so you may want to hide the scheme behind link text for brevity on a rendered page, `[e02b9c3@822FD26C](wurl:e02b9c3@822FD26C)`. But, the scheme-specific part should always be visible so people without a Wurl protocol handler installed can see the pieces they need to understand the reference. These URIs are meant to be used like a citation: "FUEL loads settings from the Windows Registry ([e02b9c3@822FD26C](wurl:e02b9c3@822FD26C))."
 
+reference implementation.
+
 ### File
 
 https://docs.oracle.com/javase/tutorial/java/package/namingpkgs.html
 
 https://git-scm.com/book/en/v2/Git-Tools-Revision-Selection
 
+lowercase. prefix
+
 You can refer generally to a file when the location isn't important by omitting the location, `wurl:e02b9c3`.
+
+short visible, long hidden
 
 ### Location
 
@@ -50,19 +52,23 @@ A location optionally follows the file hash and identifies a place in that file.
 
 #### Address
 
-The address location type is denoted by the `@` character.
+The address location type is denoted by the `@` character. The location-type-specific information is an address, as capitalized hexadecimal, without a `0x` prefix, and zero padded to the number of digits in the highest possible address.
 
-programs with multiple address spaces. aaaa@lowbus:0000100 maybe?
+preferred base address
+
+caps to distinguish from hash
 
 This idea of an address as a single number is [deeply flawed](https://github.com/iximeow/yaxpeax-arch/issues/8#issuecomment-4682404862).
 
+programs with multiple address spaces. aaaa@lowbus:0000100 maybe?
+
 #### Offset
 
-The address location type is denoted by the `#` character. The location-type-specific information is an offset from the beginning of the file, as capitalized hexadecimal, without a `0x` prefix, and zero padded to the number of digits in the highest possible offset.
+The offset location type is denoted by the `#` character. The location-type-specific information is an offset from the beginning of the file, as capitalized hexadecimal, without a `0x` prefix, and zero padded to the number of digits in the highest possible offset. Examples: `e02b9c3#00CAFE`, `5b651ba#01A`,
 
 #### Line and Column
 
-The address location type is denoted by the `#` character. The location-type-specific information is a line number and optionally a column number, separated by another `:`, both as decimal and 1-based. Examples: `5b651ba:15`, `5b651ba:3:4`. I'm not going to recommend zero padding these since it makes them so much uglier and harder to read, even though by not padding them, some reasonable sorts might place the single digit lines after the double digits.
+The line and column location type is denoted by the `:` character. The location-type-specific information is a line number and optionally a column number, separated by another `:`, both as decimal and 1-based. Examples: `5b651ba:15`, `5b651ba:3:4`. I'm not going to recommend zero padding these since it makes them so much uglier and harder to read, even though by not padding them, some reasonable sorts might place the single digit lines after the double digits.
 
 ### Extensions
 
@@ -83,6 +89,12 @@ Great question, thanks for asking! I say "Whirl" and I have a North Shore Massac
 ### Did You Have Any Ideas That Haven't Made it in Yet?
 
 Other than the address ideas already discussed, I thought a way to handle ranges could be useful. One idea was to separate two locations with a `-`, like `e02b9c3@822FD26C-822FE000` or `5b651ba:15-18`. And you could even extend that to multiple selections with `,`, like `e02b9c3@822FD26C-822FE000,738B72A9-738B82E0`. But wide ranging tool support for ranges and multiple selection is lacking and those strings just look really ugly, so I decided not to pursue it. If you want to use that grammar then maybe just use that for the text and have the actual link target the first location of the range.
+
+Video/audio `a9f8b31;10981.85`. not common. vlc --start-time.
+
+plugins to copy links from stuff.
+
+generate config.
 
 ### I'm a Tool Developer, Should I Implement Wurl?
 
