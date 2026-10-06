@@ -18,8 +18,6 @@ I find myself in need of a way to refer to disparate files and locations within 
 * Timeless: references should not need to be updated when information is learned or forgotten.
 * Normalized: only one valid representation of any given reference.
 
-It should be easy to accept that each of those requirements have an objective measure. I also want to tack on that I would prefer the references be pleasant to look at, but I admit that is entirely subjective and up to my own preferences.
-
 ### Prior Art
 
 One way to attempt to do this is in prose: "In `FUEL.exe` from the Russian release at address `0x009A8310`." This doesn't really hold up: (1) it is far from compact, (2) if a second Russian release disk is found, it becomes ambiguous which executable is being referred to, and (3) there are many valid ways to write a sentence to convey that information, so it is not normalized.
@@ -39,18 +37,17 @@ https://docs.oracle.com/javase/tutorial/java/package/namingpkgs.html
 
 https://git-scm.com/book/en/v2/Git-Tools-Revision-Selection
 
-## Addresses
+### Addresses
 
-## Offsets
 
-imhex
+programs with multiple address spaces. aaaa@lowbus:0000100 maybe?
 
-@
-#
-:
+This idea of an address as a single number is [deeply flawed](https://github.com/iximeow/yaxpeax-arch/issues/8#issuecomment-4682404862).
 
-wurl://
+### Offsets
 
+
+### Extensions
 
 https://en.wikipedia.org/wiki/Robustness_principle
 
@@ -60,16 +57,23 @@ encourage customization
 
 The extension stuff should not be vital to understanding. it should be safe to hide that in the link and not visible in the text. something like the view equals thing from the Ida extension
 
-ranges by separating with a "-" and multiple selection by separating with commas
+### FAQ (Frequently Anticipated Questions)
 
+#### How Should I Pronounce Wurl?
 
-who is this for? me. I am not pitching this as a standard. I'm just making something that I plan on using public. I have no aspirations of this being a standard
+Great question, thanks for asking! I say "Whirl" and I have a North Shore Massachusetts accent, so aim for that.
 
+#### Did You Have Any Ideas That Haven't Made it in Yet?
 
-programs with multiple address spaces. aaaa@lowbus:0000100 maybe?
+Other than the address ideas already discussed, I thought a way to handle ranges could be useful. One idea was to separate two locations with a `-`, like `e02b9c3@822FD26C-822FE000` or `5b651ba:15-18`. And you could even extend that to multiple selections with `,`, like `e02b9c3@822FD26C-822FE000,738B72A9-738B82E0`. But wide ranging tool support for ranges and multiple selection is lacking and those strings just look really ugly, so I decided not to pursue it. If you want to use that grammar then maybe just use that for the text and have the actual link target the first location of the range.
 
-https://github.com/iximeow/yaxpeax-arch/issues/8#issuecomment-4682404862
+#### I'm a Tool Developer, Should I Implement Wurl?
 
+No. The point is for a generic 3rd-party protocol handler to dispatch requests to tools using their unique interfaces. You should implement command-line arguments or your own `<tool>:` protocol handler that Wurl can invoke though.
+
+#### Who should use Wurl?
+
+Me. I am not pitching this as a standard that should be widely adopted, and have no aspirations of such. I'm just making something that I plan on using public. If you think it's cool then you're free to adopt it. You don't even have to use the reference implementation. The whole point of it is that you could write your own protocol resolver that fits your needs and all of the Wurl links in the world would "just work". If you do want to use the reference implementation, but your favorite SRE toolkit or editor isn't supported, open and issue or PR, I'd be happy to take a look.
 
 ## Reference Implementation
 
