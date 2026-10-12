@@ -38,6 +38,8 @@ fn load_config(gpa: std.mem.Allocator, arena: std.mem.Allocator, io: std.Io) !wu
     return config;
 }
 
+// FIXME: This needs to be a lot smarter. Use a better data structure for fast hash prefix lookups.
+// And report collisions instead of returning the first match.
 fn find_file_in_config_by_hash_prefix(config: *const wurl.config.Config, hash: []const u8) ?*const wurl.config.File {
     for (config.files) |*file| {
         if (std.ascii.startsWithIgnoreCase(file.hash, hash)) {
