@@ -62,6 +62,8 @@ The offset location type is denoted by the `#` character. The payload is an offs
 
 The line and column location type is denoted by the `:` character. The payload is a line number and optionally a column number, separated by another `:`, both as decimal and 1-based, as displayed in most editors by default. Examples: `5b651ba:15`, `5b651ba:3:4`. I'm not going to recommend zero-padding these since it makes them so much uglier and harder to read, even though by not padding them, some reasonable sorts might place the single-digit lines after the double-digit lines.
 
+This assumes that the text encoding and line-ending convention are a property of the file, since that information is not carried by the URI. I'm fine with that assumption; it would bloat the URI to have to say "UTF-8 and CRLF". And most editors can correctly infer that for most files. If the exact byte of text is that important, use the offset location form.
+
 ### Extensions
 
 In general, protocol handlers should try to interpret malformed input to the best of their ability, and entities creating Wurl URIs should try to emit well-formed output[.](https://en.wikipedia.org/wiki/Robustness_principle) To that end, we can imagine an extensions string with arbitrary data that a protocol handler should ignore if it doesn't understand, or honor if it does.
