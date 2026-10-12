@@ -32,6 +32,8 @@ So, there are plenty of good solutions that would work without issue if you were
 
 Wurl URIs start with the `wurl:` scheme. The scheme-specific part is human-readable and writable, so you may want to hide the scheme behind link text for brevity on a rendered page, `[e02b9c3@822FD26C](wurl:e02b9c3@822FD26C)`. But the scheme-specific part should always be visible so people without a Wurl protocol handler installed can see the pieces they need to understand the reference. These URIs are meant to be used like a citation: "FUEL loads settings from the Windows Registry ([e02b9c3@822FD26C](wurl:e02b9c3@822FD26C))."
 
+While it is convenient to have it be a URI so it can be clicked, you may also copy information out of the URI and paste it into a tool's "go to" navigation box or run the protocol handler manually; the scheme is intended to be used in this way as well. Unfortunately, due to perceived security risks, some sites, like GitHub, will not allow links with arbitrary schemes, so prioritizing this method of use is important.
+
 This repository contains a reference implementation of a protocol handler for Wurl URIs. The "Reference Implementation" section has information on how to install, configure, and run the reference implementation.
 
 ### File
@@ -188,7 +190,7 @@ The config is loaded from `wurl.zon` next to `wurl.exe`.
 
 ### Example Links
 
-Have fun clicking these!
+Have fun clicking these! (If your Markdown renderer didn't suppress the link)
 
 * [e02b9c3](wurl:e02b9c3)
 * [e02b9c3@822FD26C](wurl:e02b9c3@822FD26C)
