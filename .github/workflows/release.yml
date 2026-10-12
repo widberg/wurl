@@ -1,0 +1,87 @@
+name: Release
+
+on:
+  push:
+    tags:
+      - 'v*'
+
+permissions: {}
+
+concurrency:
+  group: release-${{ github.ref }}
+  cancel-in-progress: false
+
+jobs:
+  build:
+    name: Build for ${{ matrix.name }}
+    runs-on: ${{ matrix.os }}
+    permissions:
+      contents: read
+    strategy:
+      matrix:
+        include:
+          - name: linux
+            os: ubuntu-latest
+          - name: windows
+            os: windows-latest
+            bin_extension: .exe
+          - name: macos
+            os: macos-latest
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
+        with:
+          persist-credentials: false
+
+      - name: Install Zig 0.17.0
+        uses: mlugg/setup-zig@d1434d08867e3ee9daa34448df10607b98908d29 # v2.2.1
+        with:
+          version: 0.17.0
+          use-cache: false
+
+      - name: Build
+        shell: pwsh
+        env:
+          BINARY_EXTENSION: ${{ matrix.bin_extension }}
+          PLATFORM_NAME: ${{ matrix.name }}
+        run: |
+          zig build -Doptimize=ReleaseSafe
+          New-Item -ItemType Directory -Force dist | Out-Null
+          $safeTag = $env:GITHUB_REF_NAME -replace '[^A-Za-z0-9._-]', '-'
+          $source = "./zig-out/bin/wurl$env:BINARY_EXTENSION"
+          $destination = "./dist/wurl-$env:PLATFORM_NAME-$safeTag$env:BINARY_EXTENSION"
+          Move-Item -LiteralPath $source -Destination $destination
+
+      - name: Archive Artifacts
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        with:
+          name: wurl-${{ matrix.name }}
+          path: ./dist/*
+          if-no-files-found: error
+
+  release:
+    name: Publish release
+    needs: build
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write # Required to create the release and upload its assets.
+
+    steps:
+      - name: Download artifacts
+        uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8.0.1
+        with:
+          pattern: wurl-*
+          path: dist
+          merge-multiple: true
+
+      - name: Publish GitHub release
+        env:
+          GH_TOKEN: ${{ github.token }}
+          GH_REPO: ${{ github.repository }}
+        run: |
+          if gh release view "$GITHUB_REF_NAME" >/dev/null 2>&1; then
+            gh release upload "$GITHUB_REF_NAME" dist/* --clobber
+          else
+            gh release create "$GITHUB_REF_NAME" dist/* --verify-tag --generate-notes
+          fi
