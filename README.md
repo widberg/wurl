@@ -30,9 +30,9 @@ So, there are plenty of good solutions that would work without issue if you were
 
 ### Scheme
 
-Wurl URIs start with the `wurl:` scheme. The scheme-specific part is human-readable and writable, so you may want to hide the scheme behind link text for brevity on a rendered page, `[e02b9c3@822FD26C](wurl:e02b9c3@822FD26C)`. But the scheme-specific part should always be visible so people without a Wurl protocol handler installed can see the pieces they need to understand the reference. These URIs are meant to be used like a citation: "FUEL loads settings from the Windows Registry ([e02b9c3@822FD26C](wurl:e02b9c3@822FD26C))."
+Wurl URIs start with the `wurl:` scheme. The scheme-specific part is human-readable and writable, so you may want to hide the scheme behind link text for brevity on a rendered page, `[e02b9c3@822FD26C](wurl:e02b9c3@822FD26C)`. But the scheme-specific part should always be visible so people without a Wurl protocol handler installed can see the pieces they need to understand the reference. These URIs are meant to be used like a citation: "FUEL loads settings from the Windows Registry ([`e02b9c3@822FD26C`](wurl:e02b9c3@822FD26C))."
 
-While it is convenient to have it be a URI so it can be clicked, you may also copy information out of the URI and paste it into a tool's "go to" navigation box or run the protocol handler manually; the scheme is intended to be used in this way as well. Unfortunately, due to perceived security risks, some sites, like GitHub, will not allow links with arbitrary schemes, so prioritizing this method of use is important.
+While it is convenient to have it be a URI so it can be clicked to open the file at the location automatically, you may also copy information out of the URI and paste it into a tool's "go to" navigation box or run the protocol handler manually; the scheme is intended to be used in this way as well. Unfortunately, due to perceived security risks, some sites, like GitHub, will not allow links with arbitrary schemes, so prioritizing this method of use is important.
 
 This repository contains a reference implementation of a protocol handler for Wurl URIs. The "Reference Implementation" section has information on how to install, configure, and run the reference implementation.
 
@@ -47,6 +47,8 @@ Since the file is specified in terms of the hash of its contents, it is content-
 ### Location
 
 A location optionally follows the file hash and identifies a place in that file. The location starts with a location type character, which is followed by the location type-specific payload. You can refer generally to a file when the location isn't important by omitting the location, e.g. `wurl:e02b9c3`.
+
+The location type may imply which tool should be used to open the file. An address location might open a file in Ghidra, whereas an offset location might open the same file in ImHex. If no location is given, then the file type may be used to decide which tool to use. Ideally, all of this is configurable in the protocol handler.
 
 #### Address
 
@@ -82,7 +84,7 @@ Great question, thanks for asking! I say "Whirl," and I have a North Shore Massa
 
 Other than the "enhanced addressing forms" idea already discussed, I thought a way to handle ranges could be useful. One idea was to separate two locations with a `-`, like `e02b9c3@822FD26C-822FE000` or `5b651ba:15-18`. And you could even extend that to multiple selections with `,`, like `e02b9c3@822FD26C-822FE000,738B72A9-738B82E0`. But wide-ranging tool support for ranges and multiple selection is lacking and those strings just look really ugly, so I decided not to pursue it. If you want to use that grammar, then maybe just use that for the text and have the actual link target the first location of the range.
 
-A time location could be useful for video and audio files. My preferred syntax would be a decimal number of seconds with optional fractional seconds, separated from the file hash with a `;`, e.g., `a9f8b31;147` or `a9f8b31;10981.85`. It feels visually close to the lines and columns location type, which I like. VLC even supports `vlc --start-time=147 easier.mp4`, so tool support exists. I haven't integrated it into the standard yet because files that use time locations are not common in reverse engineering projects, and for the files that do exist, the need to refer to a specific time and not just the whole file is very small. Also, it opens the door to handling a lot more location types. Most of the time I'm sharing a video reference with someone it's a YouTube link, and that already supports `&t=201` in the query string to start playback at a specific time.
+A time location could be useful for video and audio files. My preferred syntax would be a decimal number of seconds with optional fractional seconds, separated from the file hash with a `;`, e.g., `a9f8b31;147` or `a9f8b31;10981.85`. It feels visually close to the lines and columns location type, which I like. VLC even supports `vlc.exe --start-time=147 easier.mp4`, so tool support exists. I haven't integrated it into the standard yet because files that use time locations are not common in reverse engineering projects, and for the files that do exist, the need to refer to a specific time and not just the whole file is very small. Also, it opens the door to handling a lot more location types. Most of the time I'm sharing a video reference with someone it's a YouTube link, and that already supports `&t=201` in the query string to start playback at a specific time.
 
 A big gap in tooling is plugins for various SRE toolkits and editors to copy Wurl URIs. I can imagine a Ghidra or Visual Studio Code extension to right-click and copy a Wurl URI from your cursor. If I do ever end up writing these, they will end up in this repository. But Wurl URIs are easy enough to assemble by hand that I'm not sure I'll feel a need to write extensions.
 
@@ -192,9 +194,9 @@ The config is loaded from `wurl.zon` next to `wurl.exe`.
 
 Have fun clicking these! (If your Markdown renderer didn't suppress the link)
 
-* [e02b9c3](wurl:e02b9c3)
-* [e02b9c3@822FD26C](wurl:e02b9c3@822FD26C)
-* [e02b9c3#00CAFE](wurl:e02b9c3c14fe3226cb11982e61e4bc2b5698df7c9c3e02174e18e7fd6d07bee5#00CAFE)
-* [5b651ba:15](wurl:5b651ba:15)
-* [5b651ba:3:4](wurl:5b651ba0a41d821d9670f23:3:4)
-* [5b651ba#01A](wurl:5b651ba0a41d821d9670f2387c3ab503af594e57cf61c55aa35cb80ac58171ca#01A)
+* [`e02b9c3`](wurl:e02b9c3)
+* [`e02b9c3@822FD26C`](wurl:e02b9c3@822FD26C)
+* [`e02b9c3#00CAFE`](wurl:e02b9c3c14fe3226cb11982e61e4bc2b5698df7c9c3e02174e18e7fd6d07bee5#00CAFE)
+* [`5b651ba:15`](wurl:5b651ba:15)
+* [`5b651ba:3:4`](wurl:5b651ba0a41d821d9670f23:3:4)
+* [`5b651ba#01A`](wurl:5b651ba0a41d821d9670f2387c3ab503af594e57cf61c55aa35cb80ac58171ca#01A)
