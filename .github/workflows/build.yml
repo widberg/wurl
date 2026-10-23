@@ -39,6 +39,9 @@ jobs:
       - name: Lint
         run: zig build lint
 
+      - name: Test
+        run: zig build test
+
       - name: Build
         run: zig build -Doptimize=ReleaseSafe
 
