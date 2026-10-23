@@ -12,8 +12,8 @@ pub const GhidraProjectNonShared = struct {
 };
 
 pub const GhidraProject = union(enum) {
-    shared: GhidraProjectShared,
     non_shared: GhidraProjectNonShared,
+    shared: GhidraProjectShared,
 };
 
 pub const Ghidra = struct {

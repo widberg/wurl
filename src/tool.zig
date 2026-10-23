@@ -1,5 +1,5 @@
-const std = @import("std");
 const config = @import("config.zig");
+const std = @import("std");
 const wurl = @import("wurl.zig");
 
 fn spawn(io: std.Io, argv: []const []const u8) !void {
@@ -53,7 +53,7 @@ pub fn imhex(gpa: std.mem.Allocator, io: std.Io, imhex_path: []const u8, open_pa
     defer if (maybe_offset_str) |offset_str| gpa.free(offset_str);
 
     if (offset) |off| {
-        const offset_str = try std.fmt.allocPrint(gpa, "0x{x}", .{off});
+        const offset_str = try gpa.print("0x{x}", .{off});
         maybe_offset_str = offset_str;
         try argv.appendSlice(gpa, &[_][]const u8{ "--select", offset_str });
     }

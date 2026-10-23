@@ -1,5 +1,5 @@
-const std = @import("std");
 const mecha = @import("mecha");
+const std = @import("std");
 
 pub const LineColumn = struct {
     line: u64,
@@ -8,8 +8,8 @@ pub const LineColumn = struct {
 
 pub const Location = union(enum) {
     address: ?u64,
-    offset: ?u64,
     line_column: ?LineColumn,
+    offset: ?u64,
 };
 
 pub const Wurl = struct {

@@ -1,9 +1,10 @@
-const std = @import("std");
 const builtin = @import("builtin");
-const wurl = @import("wurl");
 const clap = @import("clap");
+const std = @import("std");
+const wurl = @import("wurl");
 
 extern "kernel32" fn AttachConsole(process_id: std.os.windows.DWORD) callconv(.winapi) std.os.windows.BOOL;
+// zlinter-disable-next-line declaration_naming - Preserve the Windows API constant name.
 const ATTACH_PARENT_PROCESS = std.math.maxInt(std.os.windows.DWORD);
 
 const Error = error{
@@ -17,7 +18,7 @@ fn loadConfig(gpa: std.mem.Allocator, arena: std.mem.Allocator, io: std.Io) !wur
     const exe_dir = try std.process.executableDirPathAlloc(io, gpa);
     defer gpa.free(exe_dir);
 
-    const config_path = try std.fs.path.join(gpa, &.{ exe_dir, "wurl.zon" });
+    const config_path = try std.Io.Dir.path.join(gpa, &.{ exe_dir, "wurl.zon" });
     defer gpa.free(config_path);
 
     const source = try std.Io.Dir.cwd().readFileAllocOptions(io, config_path, gpa, std.Io.Limit.unlimited, std.mem.Alignment.of(u8), 0);
@@ -62,8 +63,9 @@ fn launch(gpa: std.mem.Allocator, io: std.Io, config: wurl.config.Config, url: w
 }
 
 pub fn main(init: std.process.Init) !void {
-    if (builtin.os.tag == .windows)
+    if (builtin.os.tag == .windows) {
         _ = AttachConsole(ATTACH_PARENT_PROCESS);
+    }
 
     const params = comptime clap.parseParamsComptime(
         \\-h, --help             Display this help and exit.
@@ -85,10 +87,11 @@ pub fn main(init: std.process.Init) !void {
     };
     defer res.deinit();
 
-    if (res.args.help != 0 or res.positionals[0] == null)
+    if (res.args.help != 0 or res.positionals[0] == null) {
         return clap.helpToFile(init.io, .stderr(), clap.Help, &params, .{});
+    }
 
-    const str = res.positionals[0] orelse unreachable;
+    const str = res.positionals[0].?;
     const url = switch ((try wurl.wurl.parse(init.gpa, str)).value) {
         .ok => |url| url,
         .err => return Error.InvalidWurl,
