@@ -10,11 +10,10 @@ const Error = error{
     NoTool,
     NoPath,
     NoGhidra,
-    NoHash,
     InvalidWurl,
 };
 
-fn load_config(gpa: std.mem.Allocator, arena: std.mem.Allocator, io: std.Io) !wurl.config.Config {
+fn loadConfig(gpa: std.mem.Allocator, arena: std.mem.Allocator, io: std.Io) !wurl.config.Config {
     const exe_dir = try std.process.executableDirPathAlloc(io, gpa);
     defer gpa.free(exe_dir);
 
@@ -38,20 +37,8 @@ fn load_config(gpa: std.mem.Allocator, arena: std.mem.Allocator, io: std.Io) !wu
     return config;
 }
 
-// FIXME: This needs to be a lot smarter. Use a better data structure for fast hash prefix lookups.
-// And report collisions instead of returning the first match.
-fn find_file_in_config_by_hash_prefix(config: *const wurl.config.Config, hash: []const u8) ?*const wurl.config.File {
-    for (config.files) |*file| {
-        if (std.ascii.startsWithIgnoreCase(file.hash, hash)) {
-            return file;
-        }
-    }
-
-    return null;
-}
-
 fn launch(gpa: std.mem.Allocator, io: std.Io, config: wurl.config.Config, url: wurl.wurl.Wurl) !void {
-    const file = find_file_in_config_by_hash_prefix(&config, url.hash) orelse return Error.NoHash;
+    const file = try config.findFileByHashPrefix(url.hash);
 
     const location = url.location orelse wurl.wurl.Location{ .address = null };
 
@@ -106,6 +93,6 @@ pub fn main(init: std.process.Init) !void {
         .ok => |url| url,
         .err => return Error.InvalidWurl,
     };
-    const config = try load_config(init.gpa, init.arena.allocator(), init.io);
+    const config = try loadConfig(init.gpa, init.arena.allocator(), init.io);
     return launch(init.gpa, init.io, config, url);
 }

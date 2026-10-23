@@ -32,6 +32,21 @@ pub const Config = struct {
     vscode: ?[]const u8 = null,
     ghidra: ?[]const u8 = null,
     files: []const File,
+
+    pub fn findFileByHashPrefix(self: *const Config, hash: []const u8) error{ DuplicateHash, NoHash }!*const File {
+        var result: ?*const File = null;
+
+        for (self.files) |*file| {
+            if (std.ascii.startsWithIgnoreCase(file.hash, hash)) {
+                if (result != null) {
+                    return error.DuplicateHash;
+                }
+                result = file;
+            }
+        }
+
+        return result orelse error.NoHash;
+    }
 };
 
 pub fn parse(gpa: std.mem.Allocator, arena: std.mem.Allocator, source: [:0]const u8, diagnostics: *std.zon.parse.Diagnostics) !Config {
