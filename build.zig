@@ -30,8 +30,9 @@ pub fn build(b: *std.Build) void {
             },
         }),
     });
-    if (target.result.os.tag == .windows)
+    if (target.result.os.tag == .windows) {
         exe.subsystem = .windows;
+    }
 
     b.installArtifact(exe);
 
@@ -59,4 +60,21 @@ pub fn build(b: *std.Build) void {
     const test_step = b.step("test", "Run tests");
     test_step.dependOn(&run_mod_tests.step);
     test_step.dependOn(&run_exe_tests.step);
+
+    const zlinter = @import("zlinter");
+    const lint_cmd = b.step("lint", "Lint source code.");
+    lint_cmd.dependOn(step: {
+        var builder = zlinter.builder(b, .{});
+        builder.addPaths(.{
+            .exclude_dirs = &.{b.path("vendor")},
+        });
+        inline for (@typeInfo(zlinter.BuiltinLintRule).@"enum".field_values) |field_value| {
+            const rule: zlinter.BuiltinLintRule = @fromBackingInt(@intCast(field_value));
+            switch (rule) {
+                .no_inferred_error_unions, .require_doc_comment => {},
+                else => builder.addRule(.{ .builtin = rule }, .{}),
+            }
+        }
+        break :step builder.build();
+    });
 }

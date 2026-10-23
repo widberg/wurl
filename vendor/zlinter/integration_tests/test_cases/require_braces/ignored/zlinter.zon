@@ -1,0 +1,7 @@
+.{
+    .rules = .{
+        .require_braces = .{
+            .if_statement = .{ .@"error" = .all },
+        },
+    },
+}

@@ -1,0 +1,238 @@
+const DefaultFormatter = @This();
+
+formatter: Formatter = .{
+    .formatFn = &format,
+},
+
+fn format(
+    formatter: *const Formatter,
+    input: Formatter.FormatInput,
+    writer: *std.Io.Writer,
+) Formatter.Error!void {
+    const self: *const DefaultFormatter = @alignCast(@fieldParentPtr("formatter", formatter));
+    _ = self;
+
+    var error_count: u32 = 0;
+    var warning_count: u32 = 0;
+    var total_disabled_by_comment: usize = 0;
+
+    var file_arena = std.heap.ArenaAllocator.init(input.runtime.sessionArena());
+
+    for (input.results) |file_result| {
+        defer _ = file_arena.reset(.retain_capacity);
+        const file_abs_path = input.file_store.fileAbsPath(file_result.file_id);
+
+        const file_renderer = zlinter.rendering.LintFileRenderer.init(
+            file_arena.allocator(),
+            input.file_store.fileSource(file_result.file_id),
+        ) catch |e| return logAndReturnWriteFailure("Render", e);
+
+        const cwd_rel_path = oom(std.Io.Dir.path.relative(
+            file_arena.allocator(),
+            input.runtime.cwd,
+            null,
+            input.runtime.cwd,
+            file_abs_path,
+        ));
+
+        problems: for (file_result.problems) |problem| {
+            if (@backingInt(problem.severity) < @backingInt(input.min_severity))
+                continue :problems;
+
+            if (problem.disabled_by_comment) {
+                total_disabled_by_comment += 1;
+                continue :problems;
+            }
+
+            switch (problem.severity) {
+                .off => continue :problems,
+                .@"error" => error_count += 1,
+                .warning => warning_count += 1,
+            }
+
+            const problem_range = input.file_store.fileRange(
+                file_result.file_id,
+                problem.start.byte_offset,
+                problem.end.byte_offset,
+            );
+
+            var severity_buffer: [32]u8 = undefined;
+            writer.print("{s} {s} [{s}{s}:{d}:{d}{s}] {s}{s}{s}\n", .{
+                problem.severity.name(&severity_buffer, .{ .tty = input.tty }),
+
+                problem.message,
+
+                input.tty.ansiOrEmpty(&.{.underline}),
+                cwd_rel_path,
+                // "+ 1" because line and column are zero indexed but
+                // when printing a link to a file it starts at 1.
+                problem_range.start.line + 1,
+                problem_range.start.column + 1,
+                input.tty.ansiOrEmpty(&.{.reset}),
+
+                input.tty.ansiOrEmpty(&.{.gray}),
+                problem.rule_id,
+                input.tty.ansiOrEmpty(&.{.reset}),
+            }) catch |e| return logAndReturnWriteFailure("Problem title", e);
+
+            if (problem.notes) |notes| {
+                for (notes) |note|
+                    renderNoteTitle(
+                        input,
+                        file_arena.allocator(),
+                        note,
+                        writer,
+                    ) catch |e| return e;
+            }
+
+            writer.writeByte('\n') catch |e| return logAndReturnWriteFailure("Newline", e);
+
+            file_renderer.render(
+                problem_range.start.line,
+                problem_range.start.column,
+                problem_range.end.line,
+                problem_range.end.column,
+                writer,
+                input.tty,
+            ) catch |e| return logAndReturnWriteFailure("Problem lint", e);
+            writer.writeAll("\n\n") catch |e| return logAndReturnWriteFailure("Newline", e);
+
+            writer.flush() catch |e| return logAndReturnWriteFailure("Flush", e);
+        }
+    }
+
+    if (error_count > 0) {
+        writer.print("{s}x {d} errors{s}\n", .{
+            input.tty.ansiOrEmpty(&.{ .red, .bold }),
+            error_count,
+            input.tty.ansiOrEmpty(&.{.reset}),
+        }) catch |e| return logAndReturnWriteFailure("Errors", e);
+    }
+
+    if (warning_count > 0) {
+        writer.print("{s}x {d} warnings{s}\n", .{
+            input.tty.ansiOrEmpty(&.{ .yellow, .bold }),
+            warning_count,
+            input.tty.ansiOrEmpty(&.{.reset}),
+        }) catch |e| return logAndReturnWriteFailure("Warnings", e);
+    }
+
+    if (total_disabled_by_comment > 0) {
+        writer.print(
+            "{s}x {d} skipped{s}\n",
+            .{
+                input.tty.ansiOrEmpty(&.{ .bold, .gray }),
+                total_disabled_by_comment,
+                input.tty.ansiOrEmpty(&.{.reset}),
+            },
+        ) catch |e| return logAndReturnWriteFailure("Skipped", e);
+    }
+
+    if (warning_count == 0 and error_count == 0) {
+        writer.print(
+            "{s}No issues!{s}\n",
+            .{
+                input.tty.ansiOrEmpty(&.{ .bold, .green }),
+                input.tty.ansiOrEmpty(&.{.reset}),
+            },
+        ) catch |e| return logAndReturnWriteFailure("Summary", e);
+    }
+}
+
+fn renderNoteTitle(
+    input: Formatter.FormatInput,
+    allocator: std.mem.Allocator,
+    note: zlinter.results.LintProblemNote,
+    writer: *std.Io.Writer,
+) Formatter.Error!void {
+    const note_abs_path = input.file_store.fileAbsPath(note.file_id);
+    const display_path = if (isStdLibPath(
+        note_abs_path,
+        input.runtime.zig_lib_directory,
+    ))
+        note_abs_path
+    else
+        oom(std.Io.Dir.path.relative(
+            allocator,
+            input.runtime.cwd,
+            null,
+            input.runtime.cwd,
+            note_abs_path,
+        ));
+
+    writer.print("  {s}↳ note{s} {s} [{s}{s}:{d}:{d}{s}]\n", .{
+        input.tty.ansiOrEmpty(&.{.cyan}),
+        input.tty.ansiOrEmpty(&.{.reset}),
+        note.message,
+        input.tty.ansiOrEmpty(&.{.underline}),
+        display_path,
+        note.line + 1,
+        note.column + 1,
+        input.tty.ansiOrEmpty(&.{.reset}),
+    }) catch |e| return logAndReturnWriteFailure("Note title", e);
+}
+
+fn isStdLibPath(abs_path: []const u8, zig_lib_directory: []const u8) bool {
+    if (!std.mem.startsWith(u8, abs_path, zig_lib_directory))
+        return false;
+
+    var rest = abs_path[zig_lib_directory.len..];
+    if (rest.len == 0) return false;
+    if (std.Io.Dir.path.isSep(rest[0])) rest = rest[1..];
+
+    return std.mem.startsWith(
+        u8,
+        rest,
+        "std" ++ std.Io.Dir.path.sep_str,
+    );
+}
+
+test "isStdLibPath matches paths inside zig lib std directory" {
+    try std.testing.expect(isStdLibPath(
+        zlinter.testing.paths.posix("/opt/zig/lib/std/math.zig"),
+        zlinter.testing.paths.posix("/opt/zig/lib"),
+    ));
+    try std.testing.expect(isStdLibPath(
+        zlinter.testing.paths.posix("/opt/zig/lib/std/zig/tokenizer.zig"),
+        zlinter.testing.paths.posix("/opt/zig/lib"),
+    ));
+}
+
+test "isStdLibPath matches when zig lib directory has trailing separator" {
+    try std.testing.expect(isStdLibPath(
+        zlinter.testing.paths.posix("/opt/zig/lib/std/math.zig"),
+        zlinter.testing.paths.posix("/opt/zig/lib/"),
+    ));
+}
+
+test "isStdLibPath rejects paths outside zig lib std directory" {
+    try std.testing.expect(!isStdLibPath(
+        zlinter.testing.paths.posix("/opt/zig/lib/compiler_rt.zig"),
+        zlinter.testing.paths.posix("/opt/zig/lib"),
+    ));
+    try std.testing.expect(!isStdLibPath(
+        zlinter.testing.paths.posix("/opt/zig/lib/stdx/math.zig"),
+        zlinter.testing.paths.posix("/opt/zig/lib"),
+    ));
+    try std.testing.expect(!isStdLibPath(
+        zlinter.testing.paths.posix("/other/zig/lib/std/math.zig"),
+        zlinter.testing.paths.posix("/opt/zig/lib"),
+    ));
+    try std.testing.expect(!isStdLibPath(
+        zlinter.testing.paths.posix("/opt/zig/lib"),
+        zlinter.testing.paths.posix("/opt/zig/lib"),
+    ));
+}
+
+fn logAndReturnWriteFailure(comptime suffix: []const u8, err: anyerror) error{WriteFailure} {
+    std.log.err(suffix ++ " failed to write: {s}", .{@errorName(err)});
+    return error.WriteFailure;
+}
+
+const Formatter = @import("./Formatter.zig");
+const std = @import("std");
+const zlinter = @import("../zlinter.zig");
+const oom = @import("../allocations.zig").oom;
+test {
+    std.testing.refAllDecls(@This());
+}

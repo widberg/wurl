@@ -1,0 +1,8 @@
+.{
+    .rules = .{
+        .field_ordering = .{
+            .struct_field_order = .{ .warning = .alphabetical_ascending },
+            .exclude_extern_structs = false,
+        },
+    },
+}

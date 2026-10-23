@@ -6,6 +6,7 @@
     .dependencies = .{
         .mecha = .{ .path = "vendor/mecha" },
         .clap = .{ .path = "vendor/clap" },
+        .zlinter = .{ .path = "vendor/zlinter" },
     },
     .paths = .{
         "build.zig",

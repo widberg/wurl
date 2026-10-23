@@ -1,0 +1,7 @@
+.{
+    .rules = .{
+        .field_ordering = .{
+            .struct_field_order = .{ .@"error" = .alphabetical_descending },
+        },
+    },
+}

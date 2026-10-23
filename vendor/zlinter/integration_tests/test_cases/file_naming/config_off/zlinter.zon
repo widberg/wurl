@@ -1,0 +1,7 @@
+.{
+    .rules = .{
+        .file_naming = .{
+            .file_struct = .off,
+        },
+    },
+}

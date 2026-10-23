@@ -1,0 +1,35 @@
+name: linux
+run-name: Linux Tests
+on:
+  push:
+    branches:
+      - 0.17.x
+    paths:
+      - '**.zig'
+      - '**.zon'
+      - 'integration_tests/test_cases/**'
+      - '.github/workflows/linux.yml'
+  pull_request:
+    paths:
+      - '**.zig'
+      - '**.zon'
+      - 'integration_tests/test_cases/**'
+      - '.github/workflows/linux.yml'
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    name: Test Linux
+    timeout-minutes: 10
+    steps:
+      - name: "Checkout repo"
+        uses: actions/checkout@v4
+      - name: "Setup zig environment"
+        uses: mlugg/setup-zig@v2
+        with:
+          version: 0.17.0
+      - name: "Run unit tests"
+        run: zig build unit-test
+      - name: "Run linter"
+        run: zig build lint
+      - name: "Run integration tests"
+        run: zig build integration-test

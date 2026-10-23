@@ -36,6 +36,9 @@ jobs:
           version: 0.17.0
           use-cache: false
 
+      - name: Lint
+        run: zig build lint
+
       - name: Build
         run: zig build -Doptimize=ReleaseSafe
 

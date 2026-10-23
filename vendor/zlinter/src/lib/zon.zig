@@ -1,0 +1,153 @@
+pub const Diagnostics = std.zon.parse.Diagnostics;
+
+pub fn parseFileAlloc(
+    T: type,
+    runtime: *const LintRuntime,
+    dir: std.Io.Dir,
+    cwd_file_path: []const u8,
+    diagnostics: ?*Diagnostics,
+) !T {
+    const io = runtime.io;
+    const gpa = runtime.sessionArena();
+
+    const file = try dir.openFile(io, cwd_file_path, .{
+        .mode = .read_only,
+    });
+    defer file.close(io);
+
+    const null_terminated = null_terminated: {
+        var file_reader_buffer: [1024]u8 = undefined;
+        var file_reader = file.reader(io, &file_reader_buffer);
+
+        var buffer: std.ArrayList(u8) = .empty;
+        defer buffer.deinit(gpa);
+
+        if (file_reader.getSize()) |size| {
+            const casted_size = std.math.cast(u32, size) orelse return error.StreamTooLong;
+            try buffer.ensureTotalCapacityPrecise(gpa, casted_size + 1); // +1 for null term
+        } else |_| {
+            // Do nothing.
+        }
+
+        try file_reader.interface.appendRemaining(
+            gpa,
+            &buffer,
+            .limited(common.max_zig_file_size_bytes),
+        );
+
+        break :null_terminated try buffer.toOwnedSliceSentinel(gpa, 0);
+    };
+    defer gpa.free(null_terminated);
+
+    var local_diagnostics: Diagnostics = undefined;
+    return try std.zon.parse.fromSlice(
+        T,
+        .{
+            .gpa = gpa,
+            .arena = gpa,
+            .source = null_terminated,
+            .diagnostics = diagnostics orelse &local_diagnostics,
+            .ignore_unknown_fields = false,
+        },
+    );
+}
+
+test "parseFileAlloc" {
+    const BasicStruct = struct {
+        age: u32 = 10,
+        names: []const []const u8 = &.{ "a", "b" },
+    };
+
+    var arena = std.heap.ArenaAllocator.init(std.testing.allocator);
+    defer arena.deinit();
+    var file_arena = std.heap.ArenaAllocator.init(std.testing.allocator);
+    defer file_arena.deinit();
+    var rule_arena = std.heap.ArenaAllocator.init(std.testing.allocator);
+    defer rule_arena.deinit();
+    const fake_args = Args.testDefault();
+    const runtime: LintRuntime = .{
+        .io = std.testing.io,
+        .verbose = false,
+        .args = &fake_args,
+        .session_arena = &arena,
+        .file_arena = &file_arena,
+        .rule_arena = &rule_arena,
+        .zig_exe = "zig",
+        .zig_lib_directory = ".",
+        .cwd = ".",
+    };
+
+    var tmp_dir = std.testing.tmpDir(.{});
+    defer tmp_dir.cleanup();
+
+    try testing.writeFile(
+        tmp_dir.dir,
+        "a.zon",
+        \\.{}
+        ,
+    );
+    try std.testing.expectEqualDeep(
+        BasicStruct{},
+        try parseFileAlloc(
+            BasicStruct,
+            &runtime,
+            tmp_dir.dir,
+            "a.zon",
+            null,
+        ),
+    );
+
+    try testing.writeFile(
+        tmp_dir.dir,
+        "b.zon",
+        \\.{
+        \\ .age = 20,
+        \\ .names = .{"c", "d"},
+        \\}
+        ,
+    );
+    try std.testing.expectEqualDeep(
+        BasicStruct{
+            .age = 20,
+            .names = &.{ "c", "d" },
+        },
+        try parseFileAlloc(
+            BasicStruct,
+            &runtime,
+            tmp_dir.dir,
+            "b.zon",
+            null,
+        ),
+    );
+
+    var diagnostics: Diagnostics = undefined;
+    try testing.writeFile(
+        tmp_dir.dir,
+        "b.zon",
+        \\.{ .not_found = 10 }
+        ,
+    );
+    const actual = parseFileAlloc(
+        BasicStruct,
+        &runtime,
+        tmp_dir.dir,
+        "b.zon",
+        &diagnostics,
+    );
+    try std.testing.expectError(
+        error.ParseZon,
+        actual,
+    );
+    try std.testing.expectEqual(@as(usize, 1), diagnostics.errors.len);
+}
+
+const Args = @import("Args.zig");
+const common = @import("session/common.zig");
+const session = @import("session.zig");
+const std = @import("std");
+const testing = @import("testing.zig");
+const LintRuntime = session.LintRuntime;
+
+test {
+    std.testing.refAllDecls(@This());
+}

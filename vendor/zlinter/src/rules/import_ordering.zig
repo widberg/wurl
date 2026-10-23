@@ -1,0 +1,1238 @@
+//! Enforces a consistent ordering of `@import` declarations by their local
+//! declaration name in Zig source files.
+//!
+//! For example: `a` < `b` and not `apple` < `zebra`.
+//!
+//! ```
+//! const a = @import("zebra");
+//! const b = @import("apple");
+//! ```
+//!
+//! Maintaining a standardized import order improves readability and reduces
+//! merge conflicts.
+//!
+//! `import_ordering` supports auto fixes with the `--fix` flag. It may take multiple runs with `--fix` to fix all places. Fixes may be omitted when comments are attached to imports.
+//!
+//! ### Import chunks
+//!
+//! An import chunk is a consecutive group of import declarations in the same
+//! scope.
+//!
+//! When `allow_line_separated_chunks` is `true`, imports separated by one or
+//! more blank lines are treated as separate chunks, and each chunk is checked
+//! independently.
+//!
+//! Comments do not split chunks. A `//` comment directly attached to an import
+//! is treated as part of that import's chunk. A `//!` doc comment is not treated
+//! as an attachable import comment.
+//!
+//! When `group_by_visibility` is `true`, public imports are grouped before
+//! private imports within each import chunk.
+//!
+//! **Auto fixing is an experimental feature so only use it if you use source control - always back up your code first!**
+
+/// Config for import_ordering rule.
+pub const Config = struct {
+    /// The severity (off, warning, error).
+    severity: zlinter.rules.LintProblemSeverity = .warning,
+
+    /// The order that the imports appear in, compared by the local declaration
+    /// name.
+    order: zlinter.rules.LintTextOrder = .alphabetical_ascending,
+
+    /// Whether imports separated by blank lines are treated as independent
+    /// chunks.
+    /// When false, all imports in the same scope must form one contiguous
+    /// chunk.
+    allow_line_separated_chunks: bool = true,
+
+    /// Whether public imports should be grouped before private imports.
+    group_by_visibility: bool = false,
+};
+
+/// Builds and returns the import_ordering rule.
+pub fn buildRule(options: zlinter.rules.RuleOptions) zlinter.rules.LintRule {
+    _ = options;
+
+    return zlinter.rules.LintRule{
+        .rule_id = @tagName(.import_ordering),
+        .run = &run,
+    };
+}
+
+/// Runs the import_ordering rule.
+fn run(
+    rule: zlinter.rules.LintRule,
+    session: *zlinter.session.LintSession,
+    doc: *const zlinter.session.LintDocument,
+    options: zlinter.rules.RunOptions,
+) zlinter.rules.RunError!?zlinter.results.LintResult {
+    const config = options.getConfig(Config);
+    if (config.severity == .off) return null;
+
+    const session_arena = session.runtime.sessionArena();
+    const rule_arena = session.runtime.ruleArena();
+
+    var lint_problems: std.ArrayList(zlinter.results.LintProblem) = .empty;
+
+    var scoped_imports = try resolveScopedImports(
+        doc,
+        session,
+        rule_arena,
+    );
+
+    const tree = doc.tree(session);
+    var import_it = scoped_imports.iterator();
+    scopes: while (import_it.next()) |e| {
+        var imports = e.value_ptr;
+        var previous: ?ImportDecl = null;
+
+        while (imports.popMin()) |import| {
+            if (previous) |p| {
+                const is_same_chunk = (p.block_end_line + 1) >= import.block_start_line;
+                const same_line = p.first_line == import.first_line;
+                const order = config.order.cmp(import.decl_name, p.decl_name);
+
+                if (!config.allow_line_separated_chunks and !is_same_chunk) {
+                    try lint_problems.append(session_arena, .{
+                        .rule_id = rule.rule_id,
+                        .severity = config.severity,
+                        .start = .startOfNode(tree, import.decl_node),
+                        .end = .endOfNode(tree, import.decl_node),
+                        .message = try session_arena.print(
+                            "Import '{s}' should be grouped with other imports",
+                            .{import.decl_name},
+                        ),
+                        .fix = if (same_line)
+                            null
+                        else if (order == .lt)
+                            try swapImportBlocksFix(
+                                doc,
+                                session,
+                                p,
+                                import,
+                                session_arena,
+                            )
+                        else
+                            removeImportSeparationFix(
+                                doc,
+                                session,
+                                p,
+                                import,
+                            ),
+                    });
+                    continue :scopes;
+                }
+
+                if (is_same_chunk) {
+                    if (config.group_by_visibility and
+                        p.visibility == .private and import.visibility == .public)
+                    {
+                        try lint_problems.append(session_arena, .{
+                            .rule_id = rule.rule_id,
+                            .severity = config.severity,
+                            .start = .startOfNode(tree, import.decl_node),
+                            .end = .endOfNode(tree, import.decl_node),
+                            .message = try session_arena.print(
+                                "Public import '{s}' should be grouped before private imports",
+                                .{import.decl_name},
+                            ),
+                            .fix = if (same_line) null else try swapVisibilityGroupsFix(
+                                doc,
+                                session,
+                                p,
+                                import,
+                                session_arena,
+                            ),
+                        });
+                        continue :scopes;
+                    }
+
+                    // Import ordering is intentionally based on the local declaration
+                    // name, not the import path.
+                    if ((!config.group_by_visibility or p.visibility == import.visibility) and
+                        order == .lt)
+                    {
+                        try lint_problems.append(session_arena, .{
+                            .rule_id = rule.rule_id,
+                            .severity = config.severity,
+                            .start = .startOfNode(tree, import.decl_node),
+                            .end = .endOfNode(tree, import.decl_node),
+                            .message = try session_arena.print(
+                                "Import '{s}' is not in {s} order",
+                                .{ import.decl_name, config.order.name() },
+                            ),
+                            .fix = if (same_line) null else try swapImportBlocksFix(
+                                doc,
+                                session,
+                                p,
+                                import,
+                                session_arena,
+                            ),
+                        });
+                        continue :scopes;
+                    }
+                }
+            }
+            previous = import;
+        }
+    }
+
+    return if (lint_problems.items.len > 0)
+        try zlinter.results.LintResult.init(
+            doc.file_id,
+            lint_problems.items,
+        )
+    else
+        null;
+}
+
+const ImportsQueueLinesAscending = std.PriorityDequeue(
+    ImportDecl,
+    void,
+    ImportDecl.compareSourceAscending,
+);
+
+const ImportDecl = struct {
+    decl_node: Ast.Node.Index,
+    /// Local declaration name used to order imports.
+    decl_name: []const u8,
+    visibility: zlinter.ast.Visibility,
+    first_line: usize,
+    last_line: usize,
+    start_offset: usize,
+    end_offset: usize,
+    block_start_line: usize,
+    block_end_line: usize,
+    block_start_offset: usize,
+    block_end_offset: usize,
+
+    pub fn compareSourceAscending(_: void, a: ImportDecl, b: ImportDecl) std.math.Order {
+        const line_order = std.math.order(a.first_line, b.first_line);
+        if (line_order != .eq) return line_order;
+
+        return std.math.order(a.start_offset, b.start_offset);
+    }
+};
+
+fn swapImportBlocksFix(
+    doc: *const zlinter.session.LintDocument,
+    session: *const zlinter.session.LintSession,
+    first: ImportDecl,
+    second: ImportDecl,
+    session_arena: std.mem.Allocator,
+) error{OutOfMemory}!?zlinter.results.LintProblemFix {
+    const source = doc.source(session);
+
+    if (first.block_start_offset >= second.block_start_offset) return null;
+    if (!sourceRangeIsBlankOnly(
+        doc.comments.line_starts,
+        source,
+        first.block_end_line + 1,
+        second.block_start_line,
+    ))
+        return null;
+
+    var text = try std.ArrayList(u8).initCapacity(
+        session_arena,
+        second.block_end_offset + 1 - first.block_start_offset,
+    );
+    errdefer text.deinit(session_arena);
+
+    try text.appendSlice(
+        session_arena,
+        source[second.block_start_offset..second.block_end_offset],
+    );
+    try text.appendSlice(
+        session_arena,
+        source[first.block_end_offset..second.block_start_offset],
+    );
+    try text.appendSlice(
+        session_arena,
+        source[first.block_start_offset..first.block_end_offset],
+    );
+
+    return .{
+        .text = try text.toOwnedSlice(session_arena),
+        .start = first.block_start_offset,
+        .end = second.block_end_offset,
+    };
+}
+
+fn swapVisibilityGroupsFix(
+    doc: *const zlinter.session.LintDocument,
+    session: *const zlinter.session.LintSession,
+    first: ImportDecl,
+    second: ImportDecl,
+    session_arena: std.mem.Allocator,
+) error{OutOfMemory}!?zlinter.results.LintProblemFix {
+    const source = doc.source(session);
+
+    if (first.block_start_offset >= second.block_start_offset) return null;
+    if (!sourceRangeIsBlankOnly(
+        doc.comments.line_starts,
+        source,
+        first.block_end_line + 1,
+        second.block_start_line,
+    ))
+        return null;
+
+    var text = try std.ArrayList(u8).initCapacity(
+        session_arena,
+        second.block_end_offset +
+            first.block_end_offset -
+            first.block_start_offset -
+            second.block_start_offset +
+            2,
+    );
+    errdefer text.deinit(session_arena);
+
+    try text.appendSlice(
+        session_arena,
+        source[second.block_start_offset..second.block_end_offset],
+    );
+    try text.appendSlice(session_arena, "\n");
+    try text.appendSlice(
+        session_arena,
+        source[first.block_start_offset..first.block_end_offset],
+    );
+
+    return .{
+        .text = try text.toOwnedSlice(session_arena),
+        .start = first.block_start_offset,
+        .end = second.block_end_offset,
+    };
+}
+
+fn removeImportSeparationFix(
+    doc: *const zlinter.session.LintDocument,
+    session: *const zlinter.session.LintSession,
+    first: ImportDecl,
+    second: ImportDecl,
+) ?zlinter.results.LintProblemFix {
+    const source = doc.source(session);
+
+    if (first.block_end_offset >= second.block_start_offset) return null;
+    if (!sourceRangeIsBlankOnly(
+        doc.comments.line_starts,
+        source,
+        first.block_end_line + 1,
+        second.block_start_line,
+    ))
+        return null;
+
+    return .{
+        .text = "",
+        .start = first.block_end_offset,
+        .end = second.block_start_offset,
+    };
+}
+
+fn importBlockStartLine(
+    source: [:0]const u8,
+    line_starts: []const usize,
+    start_line: usize,
+) usize {
+    var block_start_line = start_line;
+    while (block_start_line > 0) {
+        const prev_line = block_start_line - 1;
+        const line = lineSlice(
+            source,
+            line_starts,
+            prev_line,
+        );
+
+        if (isBlankLine(line)) break;
+        if (!isAttachableImportCommentLine(line)) break;
+
+        block_start_line = prev_line;
+    }
+
+    return block_start_line;
+}
+
+fn sourceRangeIsBlankOnly(
+    line_starts: []const usize,
+    source: [:0]const u8,
+    start_line: usize,
+    end_line: usize,
+) bool {
+    if (start_line >= end_line) return true;
+    var line = start_line;
+    while (line < end_line) : (line += 1)
+        if (!isBlankLine(lineSlice(
+            source,
+            line_starts,
+            line,
+        ))) return false;
+    return true;
+}
+
+fn lineSlice(
+    source: [:0]const u8,
+    line_starts: []const usize,
+    line: usize,
+) []const u8 {
+    const start = line_starts[line];
+    const end = lineEndExclusive(
+        source,
+        line_starts,
+        line,
+    );
+    return source[start..end];
+}
+
+fn lineEndExclusive(
+    source: [:0]const u8,
+    line_starts: []const usize,
+    line: usize,
+) usize {
+    return if (line + 1 < line_starts.len) line_starts[line + 1] else source.len;
+}
+
+fn isBlankLine(line: []const u8) bool {
+    for (line) |c|
+        switch (c) {
+            ' ', '\t', '\r', '\n' => {},
+            else => return false,
+        };
+    return true;
+}
+
+fn isAttachableImportCommentLine(line: []const u8) bool {
+    var i: usize = 0;
+    while (i < line.len) : (i += 1)
+        switch (line[i]) {
+            ' ', '\t', '\r' => continue,
+            else => break,
+        };
+    const trimmed = line[i..];
+    return std.mem.startsWith(u8, trimmed, "//") and
+        !std.mem.startsWith(u8, trimmed, "//!");
+}
+
+/// Returns declarations initialised as imports grouped by their parent (i.e., their scope).
+fn resolveScopedImports(
+    doc: *const zlinter.session.LintDocument,
+    session: *const zlinter.session.LintSession,
+    rule_arena: std.mem.Allocator,
+) !std.array_hash_map.Auto(Ast.Node.Index, ImportsQueueLinesAscending) {
+    const tree = doc.tree(session);
+    const source = tree.source;
+    const line_starts = doc.comments.line_starts;
+    var import_path_buffer: [std.Io.Dir.max_path_bytes]u8 = undefined;
+
+    const root: Ast.Node.Index = .root;
+    var node_it = try doc.nodeLineageIterator(root, rule_arena);
+    defer node_it.deinit();
+
+    var scoped_imports: std.array_hash_map.Auto(Ast.Node.Index, ImportsQueueLinesAscending) = .empty;
+    nodes: while (try node_it.next()) |tuple| {
+        const node, const connections = tuple;
+
+        const var_decl = tree.fullVarDecl(node) orelse continue :nodes;
+        var import_node = var_decl.ast.init_node.unwrap() orelse continue :nodes;
+
+        field_access: while (true)
+            switch (tree.nodeTag(import_node)) {
+                .field_access, .unwrap_optional => import_node = tree
+                    .nodeData(import_node)
+                    .node_and_token[0],
+                else => {
+                    var call_buffer: [1]Ast.Node.Index = undefined;
+                    const call = tree.fullCall(&call_buffer, import_node) orelse
+                        break :field_access;
+                    // Local calls can depend on earlier locals or have side effects.
+                    if (!zlinter.ast.isContainerMember(tree, connections))
+                        continue :nodes;
+                    import_node = call.ast.fn_expr;
+                },
+            };
+
+        _ = import_utils.writeImportPath(
+            tree,
+            import_node,
+            &import_path_buffer,
+        ) orelse continue :nodes;
+        const parent = connections.parent orelse continue :nodes;
+
+        const decl_name = tree.tokenSlice(var_decl.ast.mut_token + 1);
+
+        const first_loc = tree.tokenLocation(0, tree.firstToken(node));
+        const last_loc = tree.tokenLocation(0, tree.lastToken(node));
+        const block_start_line = importBlockStartLine(
+            source,
+            line_starts,
+            first_loc.line,
+        );
+        const block_end_line = last_loc.line;
+
+        const import = ImportDecl{
+            .decl_node = node,
+            .decl_name = decl_name,
+            .visibility = zlinter.ast.varDeclVisibility(tree, var_decl),
+            .first_line = first_loc.line,
+            .last_line = last_loc.line,
+            .start_offset = tree.tokenStart(tree.firstToken(node)),
+            .end_offset = tree.tokenStart(tree.lastToken(node)) + tree.tokenSlice(tree.lastToken(node)).len,
+            .block_start_line = block_start_line,
+            .block_end_line = block_end_line,
+            .block_start_offset = line_starts[block_start_line],
+            .block_end_offset = lineEndExclusive(
+                source,
+                line_starts,
+                block_end_line,
+            ),
+        };
+
+        var gop = try scoped_imports.getOrPut(rule_arena, parent);
+        if (gop.found_existing) {
+            try gop.value_ptr.push(rule_arena, import);
+        } else {
+            var imports: ImportsQueueLinesAscending = .empty;
+
+            try imports.push(rule_arena, import);
+            gop.value_ptr.* = imports;
+        }
+    }
+    return scoped_imports;
+}
+
+test {
+    std.testing.refAllDecls(@This());
+}
+
+test "order" {
+    try zlinter.testing.testRunRule(
+        buildRule(.{}),
+        \\ const a = @import("a");
+        \\ const b = @import("b");
+        \\ const c = @import("c");
+    ,
+        .{},
+        Config{ .order = .alphabetical_ascending },
+        &.{},
+    );
+
+    try zlinter.testing.testRunRule(
+        buildRule(.{}),
+        \\ const a = @import("a");
+        \\ const b = @import("b");
+        \\ const c = @import("c");
+    ,
+        .{},
+        Config{
+            .order = .alphabetical_descending,
+            .allow_line_separated_chunks = false,
+        },
+        &.{
+            .{
+                .rule_id = "import_ordering",
+                .severity = .warning,
+                .slice =
+                \\const b = @import("b")
+                ,
+                .message = "Import 'b' is not in reverse alphabetical order",
+                .disabled_by_comment = false,
+                .fix = .{
+                    .start = 0,
+                    .end = 50,
+                    .text =
+                    \\ const b = @import("b");
+                    \\ const a = @import("a");
+                    \\
+                    ,
+                },
+            },
+        },
+    );
+
+    try zlinter.testing.testRunRule(
+        buildRule(.{}),
+        \\ const a = @import("a");
+        \\ const c = @import("c");
+        \\ const b = @import("b");
+    ,
+        .{},
+        Config{ .order = .alphabetical_ascending, .severity = .@"error" },
+        &.{.{
+            .rule_id = "import_ordering",
+            .severity = .@"error",
+            .slice =
+            \\const b = @import("b")
+            ,
+            .message = "Import 'b' is not in alphabetical order",
+            .disabled_by_comment = false,
+            .fix = .{ .start = 25, .end = 74, .text =
+            \\ const b = @import("b"); const c = @import("c");
+            \\
+            },
+        }},
+    );
+
+    try zlinter.testing.testRunRule(
+        buildRule(.{}),
+        \\ const a = @import("a");
+        \\ const c = @import("c");
+        \\
+        \\ const b = @import("b");
+        \\ const d = @import("d");
+    ,
+        .{},
+        Config{ .order = .alphabetical_ascending },
+        &.{},
+    );
+
+    try zlinter.testing.testRunRule(
+        buildRule(.{}),
+        \\ const a = @import("a");
+        \\ const b = @import("b");
+        \\
+        \\ const d = @import("d");
+        \\ const c = @import("c");
+    ,
+        .{},
+        Config{ .order = .alphabetical_ascending },
+        &.{
+            .{
+                .rule_id = "import_ordering",
+                .severity = .warning,
+                .slice =
+                \\const c = @import("c")
+                ,
+                .message = "Import 'c' is not in alphabetical order",
+                .disabled_by_comment = false,
+                .fix = .{
+                    .start = 51,
+                    .end = 100,
+                    .text =
+                    \\ const c = @import("c"); const d = @import("d");
+                    \\
+                    ,
+                },
+            },
+        },
+    );
+
+    try zlinter.testing.testRunRule(
+        buildRule(.{}),
+        \\ const b = @import(
+        \\   "b",
+        \\ );
+        \\ const a = @import("a");
+    ,
+        .{},
+        Config{ .order = .alphabetical_ascending },
+        &.{
+            .{
+                .rule_id = "import_ordering",
+                .severity = .warning,
+                .slice =
+                \\const a = @import("a")
+                ,
+                .message = "Import 'a' is not in alphabetical order",
+                .disabled_by_comment = false,
+                .fix = .{
+                    .start = 0,
+                    .end = 56,
+                    .text =
+                    \\ const a = @import("a"); const b = @import(
+                    \\   "b",
+                    \\ );
+                    \\
+                    ,
+                },
+            },
+        },
+    );
+
+    try zlinter.testing.testRunRule(
+        buildRule(.{}),
+        \\ const b = @import("b");
+        \\ const a = @import("a");
+        \\
+        \\ const namespace = struct {
+        \\   const b_inner = @import("b");
+        \\   const a_inner = @import("a");
+        \\ };
+        \\
+        \\ fn main() void {
+        \\   const b_main = @import("b");
+        \\   const a_main = @import("a");
+        \\ }
+    ,
+        .{},
+        Config{ .order = .alphabetical_ascending },
+        &.{
+            .{
+                .rule_id = "import_ordering",
+                .severity = .warning,
+                .slice =
+                \\const a_main = @import("a")
+                ,
+                .message = "Import 'a_main' is not in alphabetical order",
+                .disabled_by_comment = false,
+                .fix = .{
+                    .start = 168,
+                    .end = 232,
+                    .text =
+                    \\   const a_main = @import("a");
+                    \\   const b_main = @import("b");
+                    \\
+                    ,
+                },
+            },
+            .{
+                .rule_id = "import_ordering",
+                .severity = .warning,
+                .slice =
+                \\const a_inner = @import("a")
+                ,
+                .message = "Import 'a_inner' is not in alphabetical order",
+                .disabled_by_comment = false,
+                .fix = .{
+                    .start = 79,
+                    .end = 145,
+                    .text =
+                    \\   const a_inner = @import("a");
+                    \\   const b_inner = @import("b");
+                    \\
+                    ,
+                },
+            },
+            .{
+                .rule_id = "import_ordering",
+                .severity = .warning,
+                .slice =
+                \\const a = @import("a")
+                ,
+                .message = "Import 'a' is not in alphabetical order",
+                .disabled_by_comment = false,
+                .fix = .{
+                    .start = 0,
+                    .end = 50,
+                    .text =
+                    \\ const a = @import("a");
+                    \\ const b = @import("b");
+                    \\
+                    ,
+                },
+            },
+        },
+    );
+
+    try zlinter.testing.testRunRule(
+        buildRule(.{}),
+        \\ const a = @import("a"); const b = @import("b");
+    ,
+        .{},
+        Config{ .order = .alphabetical_ascending },
+        &.{},
+    );
+
+    try zlinter.testing.testRunRule(
+        buildRule(.{}),
+        \\ const b = @import("b"); const a = @import("a");
+    ,
+        .{},
+        Config{ .order = .alphabetical_ascending },
+        &.{
+            .{
+                .rule_id = "import_ordering",
+                .severity = .warning,
+                .slice =
+                \\const a = @import("a")
+                ,
+                .message = "Import 'a' is not in alphabetical order",
+                .disabled_by_comment = false,
+                .fix = null,
+            },
+        },
+    );
+
+    try zlinter.testing.testRunRule(
+        buildRule(.{}),
+        \\ const a = @import("z"); const b = @import("a");
+    ,
+        .{},
+        Config{ .order = .alphabetical_ascending },
+        &.{},
+    );
+
+    try zlinter.testing.testRunRule(
+        buildRule(.{}),
+        \\ const b = @import("a"); const a = @import("z");
+    ,
+        .{},
+        Config{ .order = .alphabetical_ascending },
+        &.{
+            .{
+                .rule_id = "import_ordering",
+                .severity = .warning,
+                .slice =
+                \\const a = @import("z")
+                ,
+                .message = "Import 'a' is not in alphabetical order",
+                .disabled_by_comment = false,
+                .fix = null,
+            },
+        },
+    );
+}
+
+test "order includes imports accessed through a member" {
+    try zlinter.testing.testRunRule(
+        buildRule(.{}),
+        \\const AStruct = @import("AStruct.zig");
+        \\const CEnum = @import("c_enum.zig").CEnum;
+        \\const BStruct = @import("BStruct.zig");
+        \\
+    ,
+        .{},
+        Config{},
+        &.{.{
+            .rule_id = "import_ordering",
+            .severity = .warning,
+            .slice =
+            \\const BStruct = @import("BStruct.zig")
+            ,
+            .message = "Import 'BStruct' is not in alphabetical order",
+            .disabled_by_comment = false,
+            .fix = .{
+                .start = 40,
+                .end = 123,
+                .text =
+                \\const BStruct = @import("BStruct.zig");
+                \\const CEnum = @import("c_enum.zig").CEnum;
+                \\
+                ,
+            },
+        }},
+    );
+}
+
+test "order includes imports accessed through deeply nested members" {
+    try zlinter.testing.testRunRule(
+        buildRule(.{}),
+        \\const AStruct = @import("AStruct.zig");
+        \\const CEnum = @import("c_enum.zig").parent.child.CEnum;
+        \\const BStruct = @import("BStruct.zig");
+        \\
+    ,
+        .{},
+        Config{},
+        &.{.{
+            .rule_id = "import_ordering",
+            .severity = .warning,
+            .slice =
+            \\const BStruct = @import("BStruct.zig")
+            ,
+            .message = "Import 'BStruct' is not in alphabetical order",
+            .disabled_by_comment = false,
+            .fix = .{
+                .start = 40,
+                .end = 136,
+                .text =
+                \\const BStruct = @import("BStruct.zig");
+                \\const CEnum = @import("c_enum.zig").parent.child.CEnum;
+                \\
+                ,
+            },
+        }},
+    );
+}
+
+test "order includes imports accessed through an optional unwrap" {
+    try zlinter.testing.testRunRule(
+        buildRule(.{}),
+        \\const AStruct = @import("AStruct.zig");
+        \\const CEnum = @import("c_enum.zig").value.?;
+        \\const BStruct = @import("BStruct.zig");
+        \\
+    ,
+        .{},
+        Config{},
+        &.{.{
+            .rule_id = "import_ordering",
+            .severity = .warning,
+            .slice =
+            \\const BStruct = @import("BStruct.zig")
+            ,
+            .message = "Import 'BStruct' is not in alphabetical order",
+            .disabled_by_comment = false,
+            .fix = .{
+                .start = 40,
+                .end = 125,
+                .text =
+                \\const BStruct = @import("BStruct.zig");
+                \\const CEnum = @import("c_enum.zig").value.?;
+                \\
+                ,
+            },
+        }},
+    );
+}
+
+test "order includes imports accessed through an optional unwrap between members" {
+    try zlinter.testing.testRunRule(
+        buildRule(.{}),
+        \\const AStruct = @import("AStruct.zig");
+        \\const CEnum = @import("c_enum.zig").parent.?.child.CEnum;
+        \\const BStruct = @import("BStruct.zig");
+        \\
+    ,
+        .{},
+        Config{},
+        &.{.{
+            .rule_id = "import_ordering",
+            .severity = .warning,
+            .slice =
+            \\const BStruct = @import("BStruct.zig")
+            ,
+            .message = "Import 'BStruct' is not in alphabetical order",
+            .disabled_by_comment = false,
+            .fix = .{
+                .start = 40,
+                .end = 138,
+                .text =
+                \\const BStruct = @import("BStruct.zig");
+                \\const CEnum = @import("c_enum.zig").parent.?.child.CEnum;
+                \\
+                ,
+            },
+        }},
+    );
+}
+
+test "order includes imports accessed through a function call" {
+    try zlinter.testing.testRunRule(
+        buildRule(.{}),
+        \\const AStruct = @import("AStruct.zig");
+        \\const CEnum = @import("c_enum.zig").make();
+        \\const BStruct = @import("BStruct.zig");
+        \\
+    ,
+        .{},
+        Config{},
+        &.{.{
+            .rule_id = "import_ordering",
+            .severity = .warning,
+            .slice =
+            \\const BStruct = @import("BStruct.zig")
+            ,
+            .message = "Import 'BStruct' is not in alphabetical order",
+            .disabled_by_comment = false,
+            .fix = .{
+                .start = 40,
+                .end = 124,
+                .text =
+                \\const BStruct = @import("BStruct.zig");
+                \\const CEnum = @import("c_enum.zig").make();
+                \\
+                ,
+            },
+        }},
+    );
+}
+
+test "order includes imports accessed through a function call between members" {
+    try zlinter.testing.testRunRule(
+        buildRule(.{}),
+        \\const AStruct = @import("AStruct.zig");
+        \\const CEnum = @import("c_enum.zig").parent.make().child;
+        \\const BStruct = @import("BStruct.zig");
+        \\
+    ,
+        .{},
+        Config{},
+        &.{.{
+            .rule_id = "import_ordering",
+            .severity = .warning,
+            .slice =
+            \\const BStruct = @import("BStruct.zig")
+            ,
+            .message = "Import 'BStruct' is not in alphabetical order",
+            .disabled_by_comment = false,
+            .fix = .{
+                .start = 40,
+                .end = 137,
+                .text =
+                \\const BStruct = @import("BStruct.zig");
+                \\const CEnum = @import("c_enum.zig").parent.make().child;
+                \\
+                ,
+            },
+        }},
+    );
+}
+
+test "order includes imports accessed through a function call and optional unwrap" {
+    try zlinter.testing.testRunRule(
+        buildRule(.{}),
+        \\const AStruct = @import("AStruct.zig");
+        \\const CEnum = @import("c_enum.zig").parent.make().?.child;
+        \\const BStruct = @import("BStruct.zig");
+        \\
+    ,
+        .{},
+        Config{},
+        &.{.{
+            .rule_id = "import_ordering",
+            .severity = .warning,
+            .slice =
+            \\const BStruct = @import("BStruct.zig")
+            ,
+            .message = "Import 'BStruct' is not in alphabetical order",
+            .disabled_by_comment = false,
+            .fix = .{
+                .start = 40,
+                .end = 139,
+                .text =
+                \\const BStruct = @import("BStruct.zig");
+                \\const CEnum = @import("c_enum.zig").parent.make().?.child;
+                \\
+                ,
+            },
+        }},
+    );
+}
+
+test "allow_line_separated_chunks" {
+    try zlinter.testing.testRunRule(
+        buildRule(.{}),
+        "",
+        .{},
+        Config{ .allow_line_separated_chunks = true },
+        &.{},
+    );
+
+    try zlinter.testing.testRunRule(
+        buildRule(.{}),
+        \\ const a = @import("a");
+    ,
+        .{},
+        Config{ .allow_line_separated_chunks = true },
+        &.{},
+    );
+
+    try zlinter.testing.testRunRule(
+        buildRule(.{}),
+        \\ const b = @import("b");
+        \\
+        \\ const a = @import("a");
+    ,
+        .{},
+        Config{ .allow_line_separated_chunks = true },
+        &.{},
+    );
+
+    try zlinter.testing.testRunRule(
+        buildRule(.{}),
+        \\ const b = @import("b");
+        \\ // comment for a
+        \\ const a = @import("a");
+    ,
+        .{},
+        Config{ .allow_line_separated_chunks = true },
+        &.{
+            .{
+                .rule_id = "import_ordering",
+                .severity = .warning,
+                .slice =
+                \\const a = @import("a")
+                ,
+                .message = "Import 'a' is not in alphabetical order",
+                .fix = .{
+                    .start = 0,
+                    .end = 67,
+                    .text =
+                    \\ // comment for a
+                    \\ const a = @import("a"); const b = @import("b");
+                    \\
+                    ,
+                },
+            },
+        },
+    );
+
+    try zlinter.testing.testRunRule(
+        buildRule(.{}),
+        \\ const b = @import("b");
+        \\ // detached comment
+        \\
+        \\ const a = @import("a");
+    ,
+        .{},
+        Config{ .allow_line_separated_chunks = true },
+        &.{},
+    );
+
+    try zlinter.testing.testRunRule(
+        buildRule(.{}),
+        \\ const b = @import(
+        \\   "b",
+        \\ );
+        \\
+        \\ const a = @import("a");
+    ,
+        .{},
+        Config{ .allow_line_separated_chunks = true },
+        &.{},
+    );
+
+    try zlinter.testing.testRunRule(
+        buildRule(.{}),
+        \\ const b = @import(
+        \\   "b",
+        \\ );
+        \\
+        \\ const a = @import("a");
+    ,
+        .{},
+        Config{ .allow_line_separated_chunks = false },
+        &.{
+            .{
+                .rule_id = "import_ordering",
+                .severity = .warning,
+                .slice =
+                \\const a = @import("a")
+                ,
+                .message = "Import 'a' should be grouped with other imports",
+                .fix = .{
+                    .start = 0,
+                    .end = 57,
+                    .text =
+                    \\ const a = @import("a");
+                    \\ const b = @import(
+                    \\   "b",
+                    \\ );
+                    \\
+                    ,
+                },
+            },
+        },
+    );
+
+    try zlinter.testing.testRunRule(
+        buildRule(.{}),
+        \\ const a = @import("a");
+        \\
+        \\ const b = @import("b");
+    ,
+        .{},
+        Config{ .allow_line_separated_chunks = false, .severity = .@"error" },
+        &.{
+            .{
+                .rule_id = "import_ordering",
+                .severity = .@"error",
+                .slice =
+                \\const b = @import("b")
+                ,
+                .message = "Import 'b' should be grouped with other imports",
+                .fix = .{
+                    .start = 25,
+                    .end = 26,
+                    .text = "",
+                },
+            },
+        },
+    );
+}
+
+test "group_by_visibility" {
+    try zlinter.testing.testRunRule(
+        buildRule(.{}),
+        \\ const b = @import("a");
+        \\ pub const a = @import("b");
+        \\ const c = @import("c");
+    ,
+        .{},
+        Config{ .group_by_visibility = false },
+        &.{
+            .{
+                .rule_id = "import_ordering",
+                .severity = .warning,
+                .slice =
+                \\pub const a = @import("b")
+                ,
+                .message = "Import 'a' is not in alphabetical order",
+                .disabled_by_comment = false,
+                .fix = .{
+                    .start = 0,
+                    .end = 54,
+                    .text =
+                    \\ pub const a = @import("b");
+                    \\ const b = @import("a");
+                    \\
+                    ,
+                },
+            },
+        },
+    );
+
+    try zlinter.testing.testRunRule(
+        buildRule(.{}),
+        \\ const b = @import("a");
+        \\ pub const a = @import("b");
+        \\ const c = @import("c");
+    ,
+        .{},
+        Config{ .group_by_visibility = true },
+        &.{
+            .{
+                .rule_id = "import_ordering",
+                .severity = .warning,
+                .slice =
+                \\pub const a = @import("b")
+                ,
+                .message = "Public import 'a' should be grouped before private imports",
+                .disabled_by_comment = false,
+                .fix = .{
+                    .start = 0,
+                    .end = 54,
+                    .text =
+                    \\ pub const a = @import("b");
+                    \\
+                    \\ const b = @import("a");
+                    \\
+                    ,
+                },
+            },
+        },
+    );
+
+    try zlinter.testing.testRunRule(
+        buildRule(.{}),
+        \\ pub const a = @import("b");
+        \\
+        \\ const c = @import("c");
+        \\ const b = @import("a");
+    ,
+        .{},
+        Config{ .group_by_visibility = true },
+        &.{
+            .{
+                .rule_id = "import_ordering",
+                .severity = .warning,
+                .slice =
+                \\const b = @import("a")
+                ,
+                .message = "Import 'b' is not in alphabetical order",
+                .disabled_by_comment = false,
+                .fix = .{
+                    .start = 30,
+                    .end = 79,
+                    .text =
+                    \\ const b = @import("a"); const c = @import("c");
+                    \\
+                    ,
+                },
+            },
+        },
+    );
+}
+
+const std = @import("std");
+const zlinter = @import("zlinter");
+const import_utils = zlinter.session.imports;
+const Ast = std.zig.Ast;

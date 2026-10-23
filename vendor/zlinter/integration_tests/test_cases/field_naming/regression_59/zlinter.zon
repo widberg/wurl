@@ -1,0 +1,7 @@
+.{
+    .rules = .{
+        .field_naming = .{
+            .enum_field_min_len = .off,
+        },
+    },
+}
